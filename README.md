@@ -1,7 +1,8 @@
 # SPLASH: SPreading LAyer Simulation for Hydrodynamics
 
-Credit to https://github.com/pmp-library/pmp-library and Daniel Sieger (https://danielsieger.com/blog/2021/03/27/generating-spheres.html) for mesh related headers.
+Article preprint avaliable at https://arxiv.org/abs/2412.00867
 
+Credit to https://github.com/pmp-library/pmp-library and Daniel Sieger (https://danielsieger.com/blog/2021/03/27/generating-spheres.html) for mesh related headers.
 Credit to https://github.com/nlohmann/json for json processing.
 
 This repo contains work in progress version of a MUSCL scheme for gas dynamics on an unstructured spherical mesh. 
