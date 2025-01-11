@@ -7,7 +7,7 @@
     "gam3d":1.333333333,
     "omega_ns":0.01,
     "threads":8,
-    "accretion_on":true,
+    "accretion_on":false,
     "accretion_rate":3.25e-7,
     "e_acc":0.02,
     "omega_acc_abs":0.4,

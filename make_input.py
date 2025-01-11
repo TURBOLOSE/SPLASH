@@ -166,7 +166,7 @@ def make_input_5_sp_layer():
 
     omega=np.array([0,0,0.01])/V_conv #c
 
-    #omega=np.array([0,0,0.1])/V_conv #c
+    #omega=np.array([0,0,0.01])/V_conv #c
     
 
 
@@ -194,47 +194,34 @@ def make_input_5_sp_layer():
 
     rho=rho_0*(1+(gam-1)/2*M_0**2*np.sin(theta)**2)**(1/(gam-1))
     p=p_0*(1+(gam-1)/2*M_0**2*np.sin(theta)**2)**(gam/(gam-1))
-    #rho=np.ones(N)
-    #p=np.ones(N)*0.00005
+
     
     print("p[0]= ", p[0])
 
-    #for theta_num,theta_el in enumerate(theta):
-    #    if(abs(theta_el-np.pi/2)<0.01):
-    #        print(rho[theta_num],p[theta_num])
-    #        print(np.linalg.norm(omega)/(np.sqrt(gam*p[theta_num]/rho[theta_num])))
-    #        break
-    #=====================================================================================
+
 
     print('rho_avg=',np.sum(rho)/len(face_centers))
 
 
     face_centers=np.array(face_centers)
 
-    #p=1+(np.linalg.norm(omega)**2*rho/2*np.sin(-np.arccos(face_centers[:,2]))**2)
     l=[]
     v=[]
 
     for face_num, R in enumerate(face_centers):
-        #if( R[2] >0):
-        #    omega=np.array([0,0,0.5])
-        #elif ( R[2] <0):
-        #    omega=np.array([0,0,-0.5])
-        #else:
-        #    omega=np.array([0,0,0])
+        #==========================================================
+        #omega=np.array([0,0,0.03])*np.sin(theta[face_num])**2
+        #==========================================================
         l.append(rho[face_num]*np.cross(R,np.cross(omega,R))/(np.linalg.norm(R)**2))
         v.append(np.cross(omega,R)/np.linalg.norm(R))
 
     print('mean_vel= ',np.mean(np.linalg.norm(v, axis=1)))
     print('mean_Mach= ',np.mean(np.linalg.norm(v, axis=1)/np.sqrt(gam*p/rho)))
     
-    #fig=px.scatter(x=theta, y=np.linalg.norm(v, axis=1)/np.sqrt(gam*p/rho),  labels={"x": r"$\theta$", "y":"Mach number"})
-    #fig.show()
-    
+
     l=np.array(l)
     v=np.array(v)
 
-    #E=gam/(gam-1)*p+rho*((np.linalg.norm(v, axis=1)**2)/2-np.ones(N)*omega_ns**2*(np.sin(theta)**2)/2)
     E=1/(gam-1)*p+rho*((np.linalg.norm(v, axis=1)**2)/2-np.ones(N)*omega_ns**2*(np.sin(theta)**2)/2)
     if(E.any()<0):
         print('Energy<0!!')
@@ -243,6 +230,66 @@ def make_input_5_sp_layer():
 
     pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False, float_format="%.15f")
 
+
+def make_input_5_sp_layer_diff_rot():
+
+    pa=2
+    gam0=4./3
+    gam=2-1/gam0
+    V_conv=1
+
+    face_centers=pd.read_table('results/face_centers.dat', header=None, delimiter=r"\s+")
+
+    N=len(face_centers[0])
+    face_centers=np.array(face_centers)
+    rho=np.ones(N) #10^7 g/cm^2
+    c_s=2*10**(-3)/V_conv 
+    omega_ns=0
+
+
+    omega=np.array([0,0,0.05])/V_conv #c
+    omega_0=omega
+    
+    rho_0=rho[0]/130
+    p_0=c_s**2*rho_0/gam
+    
+    a_0=np.sqrt(gam*p_0/rho_0)
+    print("c_s=",a_0)
+    M_0=np.linalg.norm(omega)/a_0
+    print('Mach_eq=',M_0)
+    theta=np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1)) 
+
+    rho=rho_0*(1+(gam-1)/(2*pa+2)*M_0**2*np.sin(theta)**(2*pa+2))**(1/(gam-1))
+    p=p_0*(1+(gam-1)/(2*pa+2)*M_0**2*np.sin(theta)**(2*pa+2))**(gam/(gam-1))
+
+    print("p[0]= ", p[0])
+    print('rho_avg=',np.sum(rho)/len(face_centers))
+    face_centers=np.array(face_centers)
+
+    l=[]
+    v=[]
+
+    for face_num, R in enumerate(face_centers):
+        #==========================================================
+        omega=omega_0*np.sin(theta[face_num])**(pa)
+        #==========================================================
+        l.append(rho[face_num]*np.cross(R,np.cross(omega,R))/(np.linalg.norm(R)**2))
+        v.append(np.cross(omega,R)/np.linalg.norm(R))
+
+    print('mean_vel= ',np.mean(np.linalg.norm(v, axis=1)))
+    print('mean_Mach= ',np.mean(np.linalg.norm(v, axis=1)/np.sqrt(gam*p/rho)))
+    
+
+    l=np.array(l)
+    v=np.array(v)
+
+    E=1/(gam-1)*p+rho*((np.linalg.norm(v, axis=1)**2)/2-np.ones(N)*omega_ns**2*(np.sin(theta)**2)/2)
+    if(E.any()<0):
+        print('Energy<0!!')
+
+    print("E[0]= ", E[0])
+
+    pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False, float_format="%.15f")
 
 
 
@@ -338,8 +385,9 @@ def make_input_5_const_entr():
 #make_input_5()
 #make_input_5_const_entr()
 
-make_input_5_sp_layer()
+#make_input_5_sp_layer()
 
+make_input_5_sp_layer_diff_rot()
 
 
 #make_input_4()

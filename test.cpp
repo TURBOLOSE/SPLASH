@@ -11,7 +11,7 @@ int main()
     // SurfaceMesh mesh = uv_sphere(50,50);
     SurfaceMesh mesh = quad_sphere(6);
     // SurfaceMesh mesh = icosphere(5);
-    // SurfaceMesh mesh = icosphere_hex(5);
+    //SurfaceMesh mesh = icosphere_hex(5);
 
     // MUSCL_base_geometry test(mesh);
 
