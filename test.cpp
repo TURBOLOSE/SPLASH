@@ -78,7 +78,7 @@ int main()
 
     // MUSCL_HLLE test2(mesh, U_in, dim, gam, threads);
     // MUSCL_HLLE_p test2(mesh, U_in, dim, gam,omega_ns, threads);
-    // MUSCL_HLLC test2(mesh, U_in, dim, gam, omega_ns,accretion_on, threads);
+    //MUSCL_HLLC test2(mesh, U_in, dim, gam, omega_ns,accretion_on, threads);
     MUSCL_HLLCplus test2(mesh, U_in, dim, gam, omega_ns, accretion_on, threads);
 
     test2.write_face_centers();

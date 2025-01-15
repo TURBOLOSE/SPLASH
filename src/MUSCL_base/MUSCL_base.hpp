@@ -17,8 +17,7 @@ protected:
     bool stop_check = false;
 
 public:
-    MUSCL_base(SurfaceMesh mesh, std::vector<std::vector<double>> U_in, int dim, double gam, double omega_ns_i, size_t threads_i) : 
-    MUSCL_base_geometry(mesh), U(U_in), gam(gam), dim(dim), omega_ns(omega_ns_i), threads(threads_i)
+    MUSCL_base(SurfaceMesh mesh, std::vector<std::vector<double>> U_in, int dim, double gam, double omega_ns_i, size_t threads_i) : MUSCL_base_geometry(mesh), U(U_in), gam(gam), dim(dim), omega_ns(omega_ns_i), threads(threads_i)
     { // U_in should be n_faces * dim(=4)
 
         double h0_temp;
@@ -59,7 +58,7 @@ public:
                 U_minus[i][j].resize(dim);
             }
         }
-        density_floor=1e-8;
+        density_floor = 1e-8;
         N = 1;
         h0 = 10;
         for (size_t n_face = 0; n_face < this->n_faces(); n_face++)
@@ -75,12 +74,12 @@ public:
                 if (face_element < faces[n_face].size() - 1)
                 {
                     h0_temp = distance(vertices[faces[n_face][face_element]], vertices[faces[n_face][face_element + 1]]);
-                              // /surface_area[n_face];
+                    // /surface_area[n_face];
                 }
                 else
                 {
                     h0_temp = distance(vertices[faces[n_face][face_element]], vertices[faces[n_face][0]]);
-                             // /surface_area[n_face];
+                    // /surface_area[n_face];
                 }
 
                 if (h0_temp < h0)
@@ -101,25 +100,23 @@ public:
         U_temp = U;
 
         find_v_max();
-        
+
         // h0 = typical length of an edg
-        if (dt > h0 * 0.1/max_vel)
+        if (dt > h0 * 0.1 / max_vel)
         {
-            dt = h0 * 0.1/max_vel;
-            //std::cout<<dt<<"\n";
+            dt = h0 * 0.1 / max_vel;
         }
 
-        double extra_dt=extra_dt_constr();
+        double extra_dt = extra_dt_constr();
 
-        if(dt> extra_dt)
-        dt=extra_dt;
-
+        if (dt > extra_dt)
+            dt = extra_dt;
 
         find_U_edges();
         find_flux_var();
 
-        res2d(dt/2); // res2d makes U = dt/2*phi(U)
-        //res2d(dt);
+        res2d(dt / 2); // res2d makes U = dt/2*phi(U)
+        // res2d(dt);
 
         for (size_t i = 0; i < this->n_faces(); i++)
         {
@@ -128,45 +125,37 @@ public:
             {
                 U_temp[i][k] += U[i][k]; //U_temp = U+dt*phi(U)
                 U[i][k] += U_temp[i][k];  //U = U_temp = U+dt*phi(U)
-                
+
             }*/
 
-           for (size_t k = 0; k < dim; k++) 
+            for (size_t k = 0; k < dim; k++)
             {
-                //U_temp[i][k] += U[i][k]; 
-                U[i][k]+= U_temp[i][k]; 
+                // U_temp[i][k] += U[i][k];
+                U[i][k] += U_temp[i][k];
             }
 
-              if(U[i][0]<density_floor)
-                U[i][0]=density_floor; //density floor
+            if (U[i][0] < density_floor)
+                U[i][0] = density_floor; // density floor
         }
-
 
         find_U_edges();
         find_flux_var();
-        res2d(dt); //U=dt*phi( U+dt/2*phi(U))
+        res2d(dt); // U=dt*phi( U+dt/2*phi(U))
 
-
-        //U_res = U+dt*phi(U) + dt/2 * phi(U+dt*phi(U))
+        // U_res = U+dt*phi(U) + dt/2 * phi(U+dt*phi(U))
         for (size_t i = 0; i < this->n_faces(); i++)
         {
 
             for (size_t k = 0; k < dim; k++)
-            { 
-                //U[i][k]=U[i][k]/2.+U_temp[i][k]; 
-                U[i][k]+=U_temp[i][k]; 
+            {
+                // U[i][k]=U[i][k]/2.+U_temp[i][k];
+                U[i][k] += U_temp[i][k];
             }
-              if(U[i][0]<density_floor)
-                U[i][0]=density_floor; //density floor
+            if (U[i][0] < density_floor)
+                U[i][0] = density_floor; // density floor
         }
 
-
-
-
-
-
-        
-        //old RK2
+        // old RK2
         /*res2d(dt / 2.); // res2d makes U = dt/2*phi(U)
         for (size_t i = 0; i < this->n_faces(); i++)
         {
@@ -180,42 +169,38 @@ public:
         find_U_edges();
         find_flux_var();
         res2d(dt); // U=dt*phi(U+dt/2*phi(U))*/
-        
-
-
 
         double temp = 0;
         double l1, l2, l3 = 0;
-        double temp_E=0;
+        double temp_E = 0;
         l1 = 0;
         l2 = 0;
         for (size_t i = 0; i < this->n_faces(); i++)
         {
 
-            //for (size_t k = 0; k < dim; k++)
+            // for (size_t k = 0; k < dim; k++)
             //{
-            //    U[i][k] += U_temp[i][k]; // U=U+dt*phi(U+dt/2*phi(U))
-            //}
-            temp += U[i][0]*surface_area[i];
-            l1 += U[i][1]*surface_area[i];
-            l2 += U[i][2]*surface_area[i];
-            l3 += U[i][3]*surface_area[i];
-            temp_E += U[i][4]*surface_area[i];
+            //     U[i][k] += U_temp[i][k]; // U=U+dt*phi(U+dt/2*phi(U))
+            // }
+            temp += U[i][0] * surface_area[i];
+            l1 += U[i][1] * surface_area[i];
+            l2 += U[i][2] * surface_area[i];
+            l3 += U[i][3] * surface_area[i];
+            temp_E += U[i][4] * surface_area[i];
             // std::cout<<U[i][0]<<" "<<U[i][1]<<" "<<U[i][2]<<" "<<U[i][3]<<std::endl;
         }
 
-        if (steps == 0){
+        if (steps == 0)
+        {
             rho_full = temp;
             E_full = temp_E;
         }
 
-
-        std::cout << "t= " << t + dt << " mass_relative_gain=" << temp / rho_full-1 << " (l/mass)_total_norm= " << sqrt(l1 * l1 + l2 * l2 + l3 * l3)
+        std::cout << "t= " << t + dt << " mass_relative_gain=" << temp / rho_full - 1 << " (l/mass)_total_norm= " << sqrt(l1 * l1 + l2 * l2 + l3 * l3)
                   << " l_total = (" << l1 << "," << l2 << "," << l3 << ")" << "\n";
 
-
-        //std::cout <<t + dt<<" "<< temp / rho_full-1 <<" "<<temp_E / E_full-1 <<"\n";
-        //std::cout <<t + dt<<" "<< sqrt(l1 * l1 + l2 * l2 + l3 * l3)<<"\n";
+        // std::cout <<t + dt<<" "<< temp / rho_full-1 <<" "<<temp_E / E_full-1 <<"\n";
+        // std::cout <<t + dt<<" "<< sqrt(l1 * l1 + l2 * l2 + l3 * l3)<<"\n";
 
         // std::cout<<std::endl;
         // std::cout <<t<<" "<<1. - temp / rho_full << std::endl;
@@ -258,10 +243,9 @@ protected:
                 if (j == (faces[i].size() - 1))
                     j1 = 0;
 
-                
                 for (size_t k = 0; k < dim; k++)
                 {
-                       if (std::isnan((flux_var_minus[i][j][k])))
+                    if (std::isnan((flux_var_minus[i][j][k])))
                     {
                         stop_check = true;
                         std::cout << "time: " << t << " face: " << i << " edge: " << j << " NaN in flux detected!" << std::endl;
@@ -310,44 +294,53 @@ private:
     }
     void find_v_max()
     {
-        double max,c,p;
+        double max, c, p, rho;
         max = 1e-8;
-        double max_Mach=0;
+        double max_Mach = 0;
         vector3d<double> R_vec, vel, l_vec;
         for (size_t i = 0; i < this->n_faces(); i++)
         {
             l_vec[0] = U[i][1];
             l_vec[1] = U[i][2];
             l_vec[2] = U[i][3];
-            vel = cross_product(face_centers[i] / face_centers[i].norm(), l_vec);
-            vel /= U[i][0];
-            p=pressure_fc(U[i], i);
-            c_s=std::sqrt(gam*p/U[i][0]);
+            rho = U[i][0];
 
-            if (vel.norm() > max){
+            if (rho < density_floor)
+                rho = density_floor;
+            vel = cross_product(face_centers[i] / face_centers[i].norm(), l_vec);
+            vel /= rho;
+            p = pressure_fc(U[i], i);
+            c_s = std::sqrt(gam * p / rho);
+
+            if (vel.norm() > max)
+            {
                 max = vel.norm();
+                // if (this->time() > 62)
+                //     std::cout << "vel= " << max << " " << rho << " " << p << "\n";
             }
 
-            if(c_s>max)
-            max=c_s;
+            if (c_s > max)
+            {
+                max = c_s;
+                // if (this->time() > 62)
+                //     std::cout << "c_s= " << max << " " << rho << " " << p << "\n";
+            }
 
-            if(vel.norm()/c_s>max_Mach)
-            max_Mach=vel.norm()/c_s;
-
+            if (vel.norm() / c_s > max_Mach)
+                max_Mach = vel.norm() / c_s;
         }
 
         max_vel = max;
 
-        //std::cout<< max_vel<< " " << max_Mach<<"\n";
-
+        // std::cout<< max_vel<< " " << max_Mach<<"\n";
     }
 
     void find_flux_var()
     {
 
-        omp_set_dynamic(0);     // Explicitly disable dynamic teams
+        omp_set_dynamic(0);           // Explicitly disable dynamic teams
         omp_set_num_threads(threads); // Use 8 threads for all consecutive parallel regions
-        #pragma omp parallel for
+#pragma omp parallel for
         for (int i = 0; i < this->n_faces(); i++)
         {
             for (int j = 0; j < faces[i].size(); j++)
@@ -363,18 +356,17 @@ private:
 
         // std::vector<double> pp, pm, lim;
 
-        for (size_t i = 0; i < this->n_faces(); i++)    //tag1
+        for (size_t i = 0; i < this->n_faces(); i++) // tag1
         {
-            U[i][4]=pressure_fc(U[i], i);
-            U[i][0]-=rho_an[i];
-            U[i][4]-=p_an[i];        
+            U[i][4] = pressure_fc(U[i], i);
+            U[i][0] -= rho_an[i];
+            U[i][4] -= p_an[i];
         }
-        //std::cout<<rho_an[0]<<" "<<p_an[0]<<"\n";
-        
+        // std::cout<<rho_an[0]<<" "<<p_an[0]<<"\n";
 
-        omp_set_dynamic(0);     // Explicitly disable dynamic teams
+        omp_set_dynamic(0);           // Explicitly disable dynamic teams
         omp_set_num_threads(threads); // Use 8 threads for all consecutive parallel regions
-        #pragma omp parallel for
+#pragma omp parallel for
         for (size_t i = 0; i < this->n_faces(); ++i)
         {
             for (size_t j = 0; j < faces[i].size(); ++j)
@@ -388,17 +380,13 @@ private:
                 std::vector<double> r;
                 r.resize(dim);
 
-                
-
-
                 for (size_t k = 0; k < dim; k++)
                 {
                     r[k] = pm[k] / pp[k];
-                    
-                    //if(abs(pm[k])<1e-10 || abs(pp[k])<1e-10 )// crutch fix for limiter
-                    //    r[k]=0;
+
+                    // if(abs(pm[k])<1e-10 || abs(pp[k])<1e-10 )// crutch fix for limiter
+                    //     r[k]=0;
                 }
-                    
 
                 std::vector<double> lim = limiter(r, i, j);
                 for (size_t k = 0; k < dim; k++)
@@ -415,11 +403,10 @@ private:
                     {
                         U_plus[i][j][k] = U[i][k] + p_an[i] + pp[k] * lim[k] * BM_dist[i][j];
 
-                        //std::cout<<pm[4]<<" "<<pp[4]<<"  "<<lim[4]<<"\n";
+                        // std::cout<<pm[4]<<" "<<pp[4]<<"  "<<lim[4]<<"\n";
 
                         U_plus[i][j][k] = E_fc(U_plus[i][j], i, j); // p -> E (tag1)
-                        //std::cout<<U_plus[i][j][k]<<"\n";
-
+                        // std::cout<<U_plus[i][j][k]<<"\n";
                     }
                     else
                     {
@@ -444,8 +431,6 @@ private:
             res[U_element] = betas_plus[n_face][face_edge][0] * U[flux_faces_plus[n_face][face_edge][0]][U_element] +
                              betas_plus[n_face][face_edge][1] * U[flux_faces_plus[n_face][face_edge][1]][U_element];
         }
-
-       
 
         return res;
     };
@@ -473,12 +458,12 @@ private:
         {
             if (U_element == 0)
             {
-                //res[U_element] = (Up[U_element] - U[n_face][U_element]) / H_plus[n_face][face_edge] - rho_an[n_face];
+                // res[U_element] = (Up[U_element] - U[n_face][U_element]) / H_plus[n_face][face_edge] - rho_an[n_face];
                 res[U_element] = (Up[U_element] - U[n_face][U_element]) / H_plus[n_face][face_edge];
             }
             else if (U_element == 4)
             {
-                //res[U_element] = (Up[U_element] - U[n_face][U_element]) / H_plus[n_face][face_edge] - p_an[n_face];
+                // res[U_element] = (Up[U_element] - U[n_face][U_element]) / H_plus[n_face][face_edge] - p_an[n_face];
                 res[U_element] = (Up[U_element] - U[n_face][U_element]) / H_plus[n_face][face_edge];
             }
             else
@@ -498,12 +483,12 @@ private:
         {
             if (U_element == 0)
             {
-                //res1[U_element] = (-Um[U_element] + U[n_face][U_element]) / H_minus[n_face][face_edge] - rho_an[n_face];
+                // res1[U_element] = (-Um[U_element] + U[n_face][U_element]) / H_minus[n_face][face_edge] - rho_an[n_face];
                 res1[U_element] = (-Um[U_element] + U[n_face][U_element]) / H_minus[n_face][face_edge];
             }
             else if (U_element == 4)
             {
-                //res1[U_element] = (-Um[U_element] + U[n_face][U_element]) / H_minus[n_face][face_edge] - p_an[n_face];
+                // res1[U_element] = (-Um[U_element] + U[n_face][U_element]) / H_minus[n_face][face_edge] - p_an[n_face];
                 res1[U_element] = (-Um[U_element] + U[n_face][U_element]) / H_minus[n_face][face_edge];
             }
             else
@@ -517,7 +502,7 @@ private:
     double pressure_fc(std::vector<double> u, int n_face) // u[4] == energy
     {                                                     // to do: make state_vector a class and turn this into a method
         vector3d<double> l_vec, vel, r;
-        double pressure_floor=1e-16;
+        double pressure_floor = 1e-16;
         l_vec[0] = u[1];
         l_vec[1] = u[2];
         l_vec[2] = u[3];
@@ -527,15 +512,15 @@ private:
             n_edge_1 = 0;
 
         r = (vertices[faces[n_face][n_edge]] + vertices[faces[n_face][n_edge_1]]) / 2.;*/
-        r=face_centers[n_face];
+        r = face_centers[n_face];
         r /= r.norm();
 
         double theta = std::acos(r[2]);
         vel = cross_product(r, l_vec);
         vel /= -u[0];
 
-       // return (u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1) / gam; // v3 = compressed star + sin
-       return std::max(pressure_floor,(u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam - 1)); // v4
+        // return (u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1) / gam; // v3 = compressed star + sin
+        return std::max(pressure_floor, (u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam - 1)); // v4
     }
 
     double E_fc(std::vector<double> u, int n_face, int n_edge) // u[4] == pressure

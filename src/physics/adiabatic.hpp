@@ -426,6 +426,9 @@ protected:
         double sigma = acc_width / 2.355; // FWHM formula
 
         double theta_acc = std::acos(fc_normed[1] * std::sin(tilt_angle) + fc_normed[2] * std::cos(tilt_angle));
+        
+        double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+        double g_eff = GM - vel.norm() * vel.norm();
 
         // if(accretion_on && std::abs(face_centers[n_face][2]*std::cos(tilt_angle) +face_centers[n_face][1]*std::sin(tilt_angle))  <0.1)
         // if(accretion_on && theta_acc>0.1*M_PI && theta_acc < 0.9*M_PI) //exception for polar areas
@@ -458,6 +461,7 @@ protected:
 
             // old depletion
 
+
             if (!friction_on)
             {
                 double dmdt = -(fall_eff * acc_rate * 4 * M_PI) / total_mass * u[0]; // time constant in T_unit^{-1} times surf density
@@ -470,8 +474,7 @@ protected:
             }
 
             // energy sink term (radiation energy diffusion)
-            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
-            double g_eff = GM - vel.norm() * vel.norm();
+            
             // double g_eff=GM;
             double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
             double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
@@ -507,7 +510,11 @@ protected:
 
             // friction and depletion
 
-            if (friction_on)
+            
+        }
+
+
+        if (friction_on)
             {
                 double gam3d = 1 / (2 - gam);
                 double rho = gam3d / (2 * gam3d - 1) * g_eff * u[0] * u[0] / u[4];
@@ -535,7 +542,6 @@ protected:
 
                 total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
             }
-        }
 
         return res;
     };
@@ -545,29 +551,32 @@ protected:
         double dt_new = 1e20;
         vector3d<double> fc_normed, vel, l_vec, omega0, vel0;
 
-        for (size_t i = 0; i < this->n_faces(); i++)
+        if (friction_on)
         {
+            for (size_t i = 0; i < this->n_faces(); i++)
+            {
 
-            fc_normed = face_centers[i] / face_centers[i].norm();
-            l_vec[0] = U[i][1];
-            l_vec[1] = U[i][2];
-            l_vec[2] = U[i][3];
+                fc_normed = face_centers[i] / face_centers[i].norm();
+                l_vec[0] = U[i][1];
+                l_vec[1] = U[i][2];
+                l_vec[2] = U[i][3];
 
-            vel = cross_product(fc_normed, l_vec);
-            vel /= (-U[i][0]);
+                vel = cross_product(fc_normed, l_vec);
+                vel /= (-U[i][0]);
 
-            omega0[0] = 0;
-            omega0[1] = 0;
-            omega0[2] = omega_ns;
-            vel0 = cross_product(omega0, fc_normed);
-            double press = pressure(U[i], vel, fc_normed);
-            double gam3d = 1 / (2 - gam);
-            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
-            double g_eff = GM - vel.norm() * vel.norm();
-            double rho = gam3d / (2 * gam3d - 1) * g_eff * U[i][0] * U[i][0] / press;
+                omega0[0] = 0;
+                omega0[1] = 0;
+                omega0[2] = omega_ns;
+                vel0 = cross_product(omega0, fc_normed);
+                double press = pressure(U[i], vel, fc_normed);
+                double gam3d = 1 / (2 - gam);
+                double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+                double g_eff = GM - vel.norm() * vel.norm();
+                double rho = gam3d / (2 * gam3d - 1) * g_eff * U[i][0] * U[i][0] / press;
 
-            if (dt_new > 0.01 * U[i][0] / (alpha * rho * (vel - vel0).norm()))
-                dt_new = 0.01 * U[i][0] / (alpha * rho * (vel - vel0).norm());
+                if (dt_new > 0.01 * U[i][0] / (alpha * rho * (vel - vel0).norm()))
+                    dt_new = 0.01 * U[i][0] / (alpha * rho * (vel - vel0).norm());
+            }
         }
 
         if (dt_new < 0)

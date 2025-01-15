@@ -247,7 +247,12 @@ def make_input_5_sp_layer_diff_rot():
     omega_ns=0
 
 
-    omega=np.array([0,0,0.05])/V_conv #c
+    #tilt_angle=0
+    #turn_matrix=np.array([[1,0,0],[0,np.cos(tilt_angle), -np.sin(tilt_angle)],[0,np.sin(tilt_angle), np.cos(tilt_angle)]])
+
+
+    #omega=turn_matrix.dot(np.array([0,0,0.05]))/V_conv #c
+    omega=np.array([0,0,0.05])
     omega_0=omega
     
     rho_0=rho[0]/130
@@ -257,7 +262,7 @@ def make_input_5_sp_layer_diff_rot():
     print("c_s=",a_0)
     M_0=np.linalg.norm(omega)/a_0
     print('Mach_eq=',M_0)
-    theta=np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1)) 
+    theta=np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1)) #+tilt_angle
 
     rho=rho_0*(1+(gam-1)/(2*pa+2)*M_0**2*np.sin(theta)**(2*pa+2))**(1/(gam-1))
     p=p_0*(1+(gam-1)/(2*pa+2)*M_0**2*np.sin(theta)**(2*pa+2))**(gam/(gam-1))
@@ -386,7 +391,6 @@ def make_input_5_const_entr():
 #make_input_5_const_entr()
 
 #make_input_5_sp_layer()
-
 make_input_5_sp_layer_diff_rot()
 
 
