@@ -9,9 +9,9 @@ using namespace pmp;
 int main()
 {
     // SurfaceMesh mesh = uv_sphere(50,50);
-    SurfaceMesh mesh = quad_sphere(6);
+    //SurfaceMesh mesh = quad_sphere(6);
     // SurfaceMesh mesh = icosphere(5);
-    //SurfaceMesh mesh = icosphere_hex(5);
+    SurfaceMesh mesh = icosphere_hex(5);
 
     // MUSCL_base_geometry test(mesh);
 
@@ -87,6 +87,7 @@ int main()
 
     test2.write_t_rho();
     test2.write_t_p();
+    //test2.write_t_betas();
     // test2.write_t_curl();
     test2.write_t_omega_z();
     test2.write_t_L();
@@ -129,6 +130,7 @@ int main()
             test2.write_t_curl();
             test2.write_t_omega_z();
             test2.write_t_L();
+            test2.write_t_betas();
             // test2.write_t_tracer();
         }
 
@@ -140,6 +142,7 @@ int main()
             test2.write_t_curl();
             test2.write_t_omega_z();
             test2.write_t_L();
+            test2.write_t_betas();
             break;
         }
 

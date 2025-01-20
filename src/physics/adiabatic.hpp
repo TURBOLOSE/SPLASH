@@ -9,7 +9,8 @@ class adiabatic : public MUSCL_base
 {
 
 protected:
-    std::ofstream outfile, outfile_p, outfile_omega, outfile_curl;
+    std::vector<double> betas;
+    std::ofstream outfile, outfile_p, outfile_omega, outfile_curl, outfile_beta;
     std::ofstream outfile_l[3];
     bool accretion_on, friction_on;
     double total_mass, acc_rate, e_acc, omega_acc_abs, tilt_angle, acc_width, area_coeff, alpha;
@@ -22,6 +23,8 @@ public:
 
         omega_ns = omega_ns_i;
 
+        betas.resize(this->n_faces());
+
         set_analytical_solution();
         if (dim != 5)
         {
@@ -33,6 +36,10 @@ public:
         outfile.open("results/rho.dat", std::ios::out | std::ios::trunc);
         outfile.close();
         outfile.open("results/rho.dat", std::ios::out | std::ios::app);
+
+        outfile_beta.open("results/beta.dat", std::ios::out | std::ios::trunc);
+        outfile_beta.close();
+        outfile_beta.open("results/beta.dat", std::ios::out | std::ios::app);
 
         outfile_curl.open("results/curl.dat", std::ios::out | std::ios::trunc);
         outfile_curl.close();
@@ -108,6 +115,17 @@ public:
             // out_lc<< U_i[0] << " ";
         }
         outfile << "\n";
+    };
+
+    void write_t_betas()
+    {
+        outfile << this->time() << "  ";
+        for (auto beta : betas)
+        {
+
+            outfile_beta << beta << " ";
+        }
+        outfile_beta << "\n";
     };
 
     void write_t_p()
@@ -426,12 +444,30 @@ protected:
         double sigma = acc_width / 2.355; // FWHM formula
 
         double theta_acc = std::acos(fc_normed[1] * std::sin(tilt_angle) + fc_normed[2] * std::cos(tilt_angle));
-        
+
         double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
         double g_eff = GM - vel.norm() * vel.norm();
+        double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
+        double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
+        double kappa = 3.4e6;     // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
+        double C = 12. / 5 * k_m * u[0] / u[4] * pow(3. / 4 * c_sigma * g_eff * u[0], 1. / 4);
+        double beta_switch = 0.736194670678821; // switch point for function
+        double C_switch = -1 - 1 / (beta_switch - 1);
+        double beta;
+        if (C <= C_switch)
+        {
+            beta = 1 - 1 / (1 + C);
+        }
+        else
+        {
+            beta = 1 - pow(2 / C, 4);
+        }
+        betas[n_face]=beta;
 
-        // if(accretion_on && std::abs(face_centers[n_face][2]*std::cos(tilt_angle) +face_centers[n_face][1]*std::sin(tilt_angle))  <0.1)
-        // if(accretion_on && theta_acc>0.1*M_PI && theta_acc < 0.9*M_PI) //exception for polar areas
+
+
+
+
         if (accretion_on)
         {
 
@@ -461,7 +497,6 @@ protected:
 
             // old depletion
 
-
             if (!friction_on)
             {
                 double dmdt = -(fall_eff * acc_rate * 4 * M_PI) / total_mass * u[0]; // time constant in T_unit^{-1} times surf density
@@ -474,30 +509,8 @@ protected:
             }
 
             // energy sink term (radiation energy diffusion)
-            
+
             // double g_eff=GM;
-            double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
-            double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
-            double kappa = 3.4e6;     // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
-
-            double C = 12. / 5 * k_m * u[0] / u[4] * pow(3. / 4 * c_sigma * g_eff * u[0], 1. / 4);
-
-            double beta_switch = 0.736194670678821; // switch point for function
-            double C_switch = -1 - 1 / (beta_switch - 1);
-            double beta;
-
-            if (C <= C_switch)
-            {
-
-                beta = 1 - 1 / (1 + C);
-            }
-            else
-            {
-                beta = 1 - pow(2 / C, 4);
-            }
-
-            // total_mass_loss+=dmdt*surface_area[n_face];
-            // std::cout<<total_mass_gain+total_mass_loss<<"\n";
 
             double beta_ceil = 1 - 1e-8, beta_floor = 1e-8;
 
@@ -508,40 +521,53 @@ protected:
                 beta = beta_ceil;
             res[4] -= g_eff / kappa * (1 - beta);
 
-            // friction and depletion
-
             
         }
 
-
+        // friction and depletion
         if (friction_on)
-            {
-                double gam3d = 1 / (2 - gam);
-                double rho = gam3d / (2 * gam3d - 1) * g_eff * u[0] * u[0] / u[4];
+        {
+           /*double gam3d = 1 / (2 - gam);
+            double rho = gam3d / (2 * gam3d - 1) * g_eff * u[0] * u[0] / u[4];
 
-                omega0[0] = 0;
-                omega0[1] = 0;
-                omega0[2] = omega_ns;
-                vel0 = cross_product(omega0, fc_normed);
+            omega0[0] = 0;
+            omega0[1] = 0;
+            omega0[2] = omega_ns;
+            vel0 = cross_product(omega0, fc_normed);
 
-                wr = (vel - vel0);
-                wr *= -alpha * rho * (vel - vel0).norm();
-                l_fr = cross_product(fc_normed, wr);
+            wr = (vel - vel0);
+            wr *= -alpha * rho * (vel - vel0).norm();
+            l_fr = cross_product(fc_normed, wr);
 
-                res[1] += l_fr[0];
-                res[2] += l_fr[1];
-                res[3] += l_fr[2];
-                res[4] += dot_product(wr, vel0);
+            res[1] += l_fr[0];
+            res[2] += l_fr[1];
+            res[3] += l_fr[2];
+            res[4] += dot_product(wr, vel0);
 
-                // new depletion
-                res[0] -= alpha * rho * (vel - vel0).norm();
-                res[1] -= alpha * rho * (vel - vel0).norm() / u[0] * u[1];
-                res[2] -= alpha * rho * (vel - vel0).norm() / u[0] * u[2];
-                res[3] -= alpha * rho * (vel - vel0).norm() / u[0] * u[3];
-                res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam / ((gam - 1) * u[0]));
+            // new depletion
+            res[0] -= alpha * rho * (vel - vel0).norm();
+            res[1] -= alpha * rho * (vel - vel0).norm() / u[0] * u[1];
+            res[2] -= alpha * rho * (vel - vel0).norm() / u[0] * u[2];
+            res[3] -= alpha * rho * (vel - vel0).norm() / u[0] * u[3];
+            res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam / ((gam - 1) * u[0]));
 
-                total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
-            }
+            total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];*/ 
+
+            res[0] -= 3/4.*(1-beta)*g_eff*u[0];
+            omega0[0] = 0;
+            omega0[1] = 0;
+            omega0[2] = omega_ns;
+            vel0 = cross_product(omega0, fc_normed);
+            l_fr= cross_product(fc_normed, vel*2-vel0)*(3/4.*(1-beta)*g_eff*u[0]);
+
+            res[1] -= l_fr[0];
+            res[2] -= l_fr[1];
+            res[3] -= l_fr[2];
+            res[4] -=  3/4.*(1-beta)*g_eff*u[0]*(dot_product(vel,vel0)-vel0.norm());
+
+
+        }
+
 
         return res;
     };
@@ -549,7 +575,7 @@ protected:
     double extra_dt_constr()
     {
         double dt_new = 1e20;
-        vector3d<double> fc_normed, vel, l_vec, omega0, vel0;
+        /*vector3d<double> fc_normed, vel, l_vec, omega0, vel0;
 
         if (friction_on)
         {
@@ -584,7 +610,7 @@ protected:
             stop_check = true;
             dt_new = 1e20;
         }
-
+        */
         return dt_new;
     }
 
@@ -726,9 +752,9 @@ protected:
         }
 
         // std::cout<<to[4]<<" "<<sb[4]<<" "<<res[4]<<"\n";
-        // return limiter_third_order(u_r, n_face, n_edge);
+        return limiter_third_order(u_r, n_face, n_edge);
         // return limiter_superbee(u_r, n_face, n_edge);
-        return res;
+        // return res;
     }
 
     std::vector<double> limiter_third_order(std::vector<double> u_r, int n_face, int n_edge)

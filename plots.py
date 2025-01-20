@@ -35,6 +35,9 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
         #label_pr='Vorticity'
         label_pr=r'Vorticity, $\Omega$ '
         #label_pr='Bernoulli integral -1 /R'
+    elif(value=='beta'):
+        data_rho=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
+        label_pr=r'$\beta$ '
     elif(value=='c_s'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
@@ -67,6 +70,7 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
     if(print_residuals):
         for i in range(1,maxstep):
             data_rho.loc[i,:]-=data_rho.loc[0,:]
+            data_rho.loc[i,1:]/=data_rho.loc[0,1:]
         data_rho.loc[0,:]-=data_rho.loc[0,:]
         label_pr+=" residuals"
 
@@ -251,8 +255,8 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
 
 
 
-projection_plots("c_s", print_residuals=False, print_log=False, add_streamplot=False)
-#projection_plots("rho", print_residuals=True, print_log=False, add_streamplot=False)
+#projection_plots("c_s", print_residuals=False, print_log=False, add_streamplot=False)
+projection_plots('beta', print_residuals=False, print_log=False, add_streamplot=False)
 
 
 
