@@ -119,7 +119,7 @@ public:
 
     void write_t_betas()
     {
-        outfile << this->time() << "  ";
+        outfile_beta << this->time() << "  ";
         for (auto beta : betas)
         {
 
