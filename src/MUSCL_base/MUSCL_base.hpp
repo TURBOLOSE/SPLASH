@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../geometry/MUSCL_geometry.hpp"
+#include "../json.hpp"
 #include <omp.h>
 
 class MUSCL_base : public MUSCL_base_geometry
@@ -10,7 +11,7 @@ protected:
     std::vector<double> rho_an, p_an;
     std::vector<std::vector<std::vector<double>>> flux_var_plus, flux_var_minus, U_plus, U_minus;
     // flux_var^plus_ij flux_var^minus_ij, U_ij (short), U_ji(short)
-    double dt, gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, density_floor;
+    double dt, gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, density_floor, CFL;
     int dim;
     bool var_gamma;
     size_t steps, threads;
@@ -59,6 +60,12 @@ public:
                 U_minus[i][j].resize(dim);
             }
         }
+
+        std::ifstream ifs("input/parameters.json");
+        nlohmann::json parameters = nlohmann::json::parse(ifs);
+
+        CFL = parameters["CFL"];
+
         density_floor = 1e-8;
         N = 1;
         h0 = 10;
@@ -103,9 +110,9 @@ public:
         find_v_max();
 
         // h0 = typical length of an edg
-        if (dt > h0 * 0.1 / max_vel)
+        if (dt > h0 * CFL / max_vel)
         {
-            dt = h0 * 0.1 / max_vel;
+            dt = h0 * CFL / max_vel;
         }
 
         double extra_dt = extra_dt_constr();

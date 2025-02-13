@@ -16,9 +16,9 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
     
     gam=1.25
 
-    #path='results/'
+    path='results/'
     #path='plots/big_quad_next/'
-    path='plots/new split test/2 layers/'
+    #path='plots/new split test/2 layers/'
     #path='plots/shock_test/'
 
     if(value=='rho'):
@@ -256,7 +256,7 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
 
 
 #projection_plots("c_s", print_residuals=False, print_log=False, add_streamplot=False)
-projection_plots('vort', print_residuals=False, print_log=False, add_streamplot=False)
+projection_plots('rho', print_residuals=False, print_log=False, add_streamplot=False)
 
 
 
