@@ -12,6 +12,7 @@ protected:
     // flux_var^plus_ij flux_var^minus_ij, U_ij (short), U_ji(short)
     double dt, gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, density_floor;
     int dim;
+    bool var_gamma;
     size_t steps, threads;
     double omega_ns;
     bool stop_check = false;
@@ -262,6 +263,7 @@ protected:
     virtual std::vector<double> flux_star(std::vector<double> ul, std::vector<double> ur, int n_face, int n_edge) = 0;
     virtual std::vector<double> limiter(std::vector<double> u_r, int n_face, int n_edge) = 0;
     virtual std::vector<double> source(std::vector<double> u, int n_face) = 0;
+    virtual double make_gam(std::vector<double> &u, vector3d<double> &r) = 0;
     virtual double extra_dt_constr() = 0;
     // virtual void set_analytical_solution();
 
@@ -365,7 +367,8 @@ private:
         // std::cout<<rho_an[0]<<" "<<p_an[0]<<"\n";
 
         omp_set_dynamic(0);           // Explicitly disable dynamic teams
-        omp_set_num_threads(threads); // Use 8 threads for all consecutive parallel regions
+        omp_set_num_threads(threads); // Use threads for all consecutive parallel regions
+
 #pragma omp parallel for
         for (size_t i = 0; i < this->n_faces(); ++i)
         {
@@ -406,7 +409,7 @@ private:
                         // std::cout<<pm[4]<<" "<<pp[4]<<"  "<<lim[4]<<"\n";
 
                         U_plus[i][j][k] = E_fc(U_plus[i][j], i, j); // p -> E (tag1)
-                        // std::cout<<U_plus[i][j][k]<<"\n";
+                        //std::cout<<U_plus[i][j][k]<<"\n";
                     }
                     else
                     {
@@ -499,8 +502,8 @@ private:
         return res1;
     }
 
-    double pressure_fc(std::vector<double> u, int n_face) // u[4] == energy
-    {                                                     // to do: make state_vector a class and turn this into a method
+    double pressure_fc(std::vector<double> &u, int n_face) // u[4] == energy
+    {                                                      // to do: make state_vector a class and turn this into a method
         vector3d<double> l_vec, vel, r;
         double pressure_floor = 1e-16;
         l_vec[0] = u[1];
@@ -519,12 +522,14 @@ private:
         vel = cross_product(r, l_vec);
         vel /= -u[0];
 
+        double gam_0 = make_gam(u, r);
+
         // return (u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1) / gam; // v3 = compressed star + sin
-        return std::max(pressure_floor, (u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam - 1)); // v4
+        return std::max(pressure_floor, (u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1)); // v4
     }
 
-    double E_fc(std::vector<double> u, int n_face, int n_edge) // u[4] == pressure
-    {
+    double E_fc(std::vector<double> &u, int n_face, int n_edge) // u[4] == pressure
+    {                                                           // because we reconstruct pressure on edge we needed new formula for beta
         vector3d<double> l_vec, vel, r;
 
         l_vec[0] = u[1];
@@ -537,12 +542,41 @@ private:
 
         r = (vertices[faces[n_face][n_edge]] + vertices[faces[n_face][n_edge_1]]);
         r /= r.norm();
-
         double theta = std::acos(r[2]);
 
         vel = cross_product(r, l_vec);
         vel /= (-u[0]);
 
-        return 1 / (gam - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2;
+        double gam_0 = gam;
+
+        if (var_gamma)
+        {
+            double GM = 0.217909;
+            double g_eff = GM - vel.norm() * vel.norm();
+            double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
+            double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
+            // new expression for C
+            double C = 12. / 5 * k_m * u[0] / (3 * u[4]) * pow(3. / 4 * c_sigma * g_eff * u[0], 1. / 4);
+            double beta_switch = 0.5479; // switch point for initial function
+            double C_switch = beta_switch / (1 - beta_switch);
+            double beta;
+
+            if (C <= C_switch)
+            {
+                beta = C / (1 + C);
+            }
+            else
+            {
+                beta = 1 - pow(1 / C, 4);
+            }
+
+            beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
+            beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
+            double gam3d = 1 / (2 - gam);
+            gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
+            gam_0 = 2 - 1 / gam_0; // 2d ver
+        }
+
+        return 1 / (gam_0 - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2;
     }
 };

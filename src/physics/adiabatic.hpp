@@ -265,14 +265,6 @@ public:
         double flux_tot_0 = 0, flux_tot_45 = 0, flux_tot_90 = 0, flux_tot_180 = 0;
         double phi_fc, theta_fc, d_vec, cos_alpha, PI;
 
-        double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
-        double g_eff, C, beta, E;
-        double c_sigma = 4.85e36;               // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
-        double k_m = 1.6e-13;                   // k/m in V_unit(speed of light)^2/K
-        double kappa = 3.4e6;                   // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
-        double beta_switch = 0.736194670678821; // switch point for function
-        double C_switch = -1 - 1 / (beta_switch - 1);
-        double beta_ceil = 1 - 1e-8, beta_floor = 1e-8;
 
         for (size_t n_face = 0; n_face < this->n_faces(); n_face++)
         {
@@ -288,28 +280,7 @@ public:
             vel /= (-U[n_face][0]);
             PI = pressure(U[n_face], vel, face_centers[n_face] / face_centers[n_face].norm());
 
-            g_eff = GM - vel.norm() * vel.norm();
-
-            C = 12. / 5 * k_m * U[n_face][0] / PI * pow(3. / 4 * c_sigma * g_eff * U[n_face][0], 1. / 4);
-
-            if (C <= C_switch)
-            {
-
-                beta = 1 - 1 / (1 + C);
-            }
-            else
-            {
-                beta = 1 - pow(2 / C, 4);
-            }
-
-            if (beta < beta_floor || std::isnan(beta)) // beta limitations
-                beta = beta_floor;
-
-            if (beta > beta_ceil)
-                beta = beta_ceil;
-
-            E = g_eff / kappa * (1 - beta);
-
+            
             if (phi_fc < M_PI / 2 && phi_fc > -M_PI / 2)
             {
                 d_vec = dot_product(obs_vector_0, face_centers[n_face] / face_centers[n_face].norm());
@@ -445,28 +416,18 @@ protected:
 
         double theta_acc = std::acos(fc_normed[1] * std::sin(tilt_angle) + fc_normed[2] * std::cos(tilt_angle));
 
-        double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
-        double g_eff = GM - vel.norm() * vel.norm();
-        double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
-        double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
-        double kappa = 3.4e6;     // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
-        double C = 12. / 5 * k_m * u[0] / u[4] * pow(3. / 4 * c_sigma * g_eff * u[0], 1. / 4);
-        double beta_switch = 0.736194670678821; // switch point for function
-        double C_switch = -1 - 1 / (beta_switch - 1);
-        double beta;
-        if (C <= C_switch)
-        {
-            beta = 1 - 1 / (1 + C);
+        double beta = make_beta(u, fc_normed);
+        betas[n_face] = beta;
+
+        double gam_0;
+        double gam3d = 1 / (2 - gam);
+        if(var_gamma){
+             gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
         }
-        else
-        {
-            beta = 1 - pow(2 / C, 4);
-        }
-        betas[n_face]=beta;
-
-
-
-
+         gam_0 = 2 - 1 / gam_0; // 2d ver
+        
+       
+       
 
         if (accretion_on)
         {
@@ -505,72 +466,131 @@ protected:
                 res[1] += dmdt * rxv[0];
                 res[2] += dmdt * rxv[1];
                 res[3] += dmdt * rxv[2];
-                res[4] += dmdt * (gam / (gam - 1) * u[4] / u[0] + (vel.norm() * vel.norm()) / 2.);
+                res[4] += dmdt * (gam_0 / (gam_0 - 1) * u[4] / u[0] + (vel.norm() * vel.norm()) / 2.);
             }
 
             // energy sink term (radiation energy diffusion)
 
             // double g_eff=GM;
 
-            double beta_ceil = 1 - 1e-8, beta_floor = 1e-8;
+            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+            double g_eff = GM - vel.norm() * vel.norm();
+            double kappa = 3.4e6; // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
 
-            if (beta < beta_floor || std::isnan(beta)) // beta limitations
-                beta = beta_floor;
-
-            if (beta > beta_ceil)
-                beta = beta_ceil;
             res[4] -= g_eff / kappa * (1 - beta);
-
-            
         }
 
         // friction and depletion
         if (friction_on)
         {
-           /*double gam3d = 1 / (2 - gam);
-            double rho = gam3d / (2 * gam3d - 1) * g_eff * u[0] * u[0] / u[4];
+            /*double gam3d = 1 / (2 - gam);
+             double rho = gam3d / (2 * gam3d - 1) * g_eff * u[0] * u[0] / u[4];
 
+             omega0[0] = 0;
+             omega0[1] = 0;
+             omega0[2] = omega_ns;
+             vel0 = cross_product(omega0, fc_normed);
+
+             wr = (vel - vel0);
+             wr *= -alpha * rho * (vel - vel0).norm();
+             l_fr = cross_product(fc_normed, wr);
+
+             res[1] += l_fr[0];
+             res[2] += l_fr[1];
+             res[3] += l_fr[2];
+             res[4] += dot_product(wr, vel0);
+
+             // new depletion
+             res[0] -= alpha * rho * (vel - vel0).norm();
+             res[1] -= alpha * rho * (vel - vel0).norm() / u[0] * u[1];
+             res[2] -= alpha * rho * (vel - vel0).norm() / u[0] * u[2];
+             res[3] -= alpha * rho * (vel - vel0).norm() / u[0] * u[3];
+             res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam / ((gam - 1) * u[0]));
+
+             total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];*/
+
+            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+            double g_eff = GM - vel.norm() * vel.norm();
+            res[0] -= 3 / 4. * (1 - beta) * g_eff * u[0];
             omega0[0] = 0;
             omega0[1] = 0;
             omega0[2] = omega_ns;
             vel0 = cross_product(omega0, fc_normed);
-
-            wr = (vel - vel0);
-            wr *= -alpha * rho * (vel - vel0).norm();
-            l_fr = cross_product(fc_normed, wr);
-
-            res[1] += l_fr[0];
-            res[2] += l_fr[1];
-            res[3] += l_fr[2];
-            res[4] += dot_product(wr, vel0);
-
-            // new depletion
-            res[0] -= alpha * rho * (vel - vel0).norm();
-            res[1] -= alpha * rho * (vel - vel0).norm() / u[0] * u[1];
-            res[2] -= alpha * rho * (vel - vel0).norm() / u[0] * u[2];
-            res[3] -= alpha * rho * (vel - vel0).norm() / u[0] * u[3];
-            res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam / ((gam - 1) * u[0]));
-
-            total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];*/ 
-
-            res[0] -= 3/4.*(1-beta)*g_eff*u[0];
-            omega0[0] = 0;
-            omega0[1] = 0;
-            omega0[2] = omega_ns;
-            vel0 = cross_product(omega0, fc_normed);
-            l_fr= cross_product(fc_normed, vel*2-vel0)*(3/4.*(1-beta)*g_eff*u[0]);
+            l_fr = cross_product(fc_normed, vel * 2 - vel0) * (3 / 4. * (1 - beta) * g_eff * u[0]);
 
             res[1] -= l_fr[0];
             res[2] -= l_fr[1];
             res[3] -= l_fr[2];
-            res[4] -=  3/4.*(1-beta)*g_eff*u[0]*(dot_product(vel,vel0)-vel0.norm());
-
-
+            res[4] -= 3 / 4. * (1 - beta) * g_eff * u[0] * (dot_product(vel, vel0) - vel0.norm());
         }
-
 
         return res;
     };
+
+    double make_beta(std::vector<double> &u, vector3d<double> &r)
+    {
+
+        vector3d<double> l_vec, vel, r_normed;
+
+        l_vec[0] = u[1];
+        l_vec[1] = u[2];
+        l_vec[2] = u[3];
+
+        r_normed = r / r.norm();
+        vel = cross_product(r_normed, l_vec);
+        vel /= (-u[0]);
+
+        double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+        double g_eff = GM - vel.norm() * vel.norm();
+        double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
+        double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
+        double C = 12. / 5 * k_m * u[0] / (u[4] - u[0] * vel.norm() * vel.norm() / 2) * pow(3. / 4 * c_sigma * g_eff * u[0], 1. / 4);
+        double beta_switch = 0.736194670678821; // switch point for initial function
+        double C_switch = -1 - 1 / (beta_switch - 1);
+        double beta;
+
+        if (C <= C_switch)
+        {
+            beta = 1 - 1 / (1 + C);
+        }
+        else
+        {
+            beta = 1 - pow(2 / C, 4);
+        }
+
+        // 2 Newton iterations
+
+        // std::cout << "1: " << beta << " ";
+        beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
+        // std::cout << "2: " << beta << " ";
+        beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
+        // std::cout << "3: " << beta << "\n";
+
+        double beta_ceil = 1 - 1e-10, beta_floor = 0;
+
+        if (beta < beta_floor || std::isnan(beta)) // beta limitations
+            beta = beta_floor;
+
+        if (beta > beta_ceil)
+            beta = beta_ceil;
+
+        return beta;
+    }
+
+    double make_gam(std::vector<double> &u, vector3d<double> &r)
+    {
+
+        if (var_gamma)
+        {
+            double beta = make_beta(u, r);
+            double gam3d = 1 / (2 - gam);
+            double gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
+            gam_0 = 2 - 1 / gam_0; // 2d ver
+            return gam_0;
+        }else{
+            return gam;
+        }
+    }
 
     double extra_dt_constr()
     {
@@ -616,14 +636,18 @@ protected:
 
     double pressure(std::vector<double> u, vector3d<double> vel, vector3d<double> r)
     {
-        double theta = std::acos(r[2] / r.norm());
 
+        // double gam_0=gam;// older ver
+
+        double theta = std::acos(r[2] / r.norm());
         double pressure_floor = 1e-16;
+        double gam_0 = make_gam(u, r);
+
         // return  (u[4] - u[0] * vel.norm() * vel.norm() / 2) * (gam - 1); //v1 = uncompressed
         // return (u[4] - u[0] * vel.norm() * vel.norm() / 2) * (gam - 1) / gam; // v2 = different P
         // return (u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1) / gam; // v3 = compressed star + sin
         // return std::max(pressure_floor,(u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1)); // v4 = compressed star new gamma
-        return std::max(pressure_floor, (u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam - 1)); // v4 = compressed star new gamma
+        return std::max(pressure_floor, (u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1)); // v4 = compressed star new gamma
     }
 
     std::vector<double> char_vel(std::vector<double> u_L, std::vector<double> u_R, int n_face, int n_edge)
@@ -664,11 +688,24 @@ protected:
 
         p_L = pressure(u_L, vel_l, edge_center_l);
         p_R = pressure(u_R, vel_r, edge_center_r);
-
-        a_L = std::sqrt(gam * p_L / u_L[0]);
-        a_R = std::sqrt(gam * p_R / u_R[0]);
-
+        
+        double gam_L=gam;
+        double gam_R=gam;
+        
         double z = (gam - 1) / (2 * gam);
+
+        if(var_gamma){
+            gam_L=make_gam(u_L,edge_center_l);
+            gam_R=make_gam(u_R,edge_center_r);
+            z=((gam_L+gam_R)/2. - 1) / (2 * (gam_L+gam_R)/2.);
+        }
+
+
+        a_L = std::sqrt(gam_L * p_L / u_L[0]);
+        a_R = std::sqrt(gam_R * p_R / u_R[0]);
+
+        
+
         // double p_star=std::pow((a_L+a_R-(gam-1)/2. * (dot_product(edge_normals[n_face][n_edge], vel_r)-dot_product(edge_normals[n_face][n_edge], vel_l)))
         //  /( a_L/std::pow(p_L,z) + a_R/std::pow(p_R,z) ),1./z);
 
@@ -719,7 +756,6 @@ protected:
 
     std::vector<double> limiter(std::vector<double> u_r, int n_face, int n_edge)
     { // here U[4] is also pressure
-        // std::cout<<u_r[0]<<" "<<u_r[1]<<" "<<u_r[2]<<" "<<u_r[3]<<" "<<u_r[4]<<"\n";
 
         std::vector<double> res;
         res.resize(dim);
@@ -786,7 +822,9 @@ protected:
         // double p = pressure(U[n_face], vel, edge_center);
         double p = U[n_face][4] + p_an[n_face];
 
-        c = std::sqrt(gam * p / (U[n_face][0] + rho_an[n_face]));
+        double gam_0=make_gam(u_r, edge_center);
+
+        c = std::sqrt(gam_0 * p / (U[n_face][0] + rho_an[n_face]));
         // c = std::sqrt(gam * p / U[n_face][0]);
 
         nu_plus = (c + dot_product(vel, edge_normals[n_face][n_edge])) * dt *
@@ -838,8 +876,8 @@ protected:
         double p = U[n_face][4] + p_an[n_face];
 
         // c = std::sqrt(gam * p / U[n_face][0]);
-
-        c = std::sqrt(gam * p / (U[n_face][0] + rho_an[n_face]));
+        double gam_0=make_gam(u_r, edge_center);
+        c = std::sqrt(gam_0 * p / (U[n_face][0] + rho_an[n_face]));
 
         nu_plus = (c + dot_product(vel, edge_normals[n_face][n_edge])) * dt *
                   (distance(vertices[faces[n_face][n_edge]], vertices[faces[n_face][n_edge_1]]) / surface_area[n_face]);
