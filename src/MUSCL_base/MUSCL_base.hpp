@@ -66,7 +66,7 @@ public:
 
         CFL = parameters["CFL"];
 
-        density_floor = 1e-8;
+        density_floor = 1e-15;
         N = 1;
         h0 = 10;
         for (size_t n_face = 0; n_face < this->n_faces(); n_face++)
@@ -257,6 +257,7 @@ protected:
                     {
                         stop_check = true;
                         std::cout << "time: " << t << " face: " << i << " edge: " << j << " NaN in flux detected!" << std::endl;
+                        exit(1);
                     }
 
                     // U[i][k] -= dt_here * (distance(vertices[faces[i][j]],vertices[faces[i][j1]]) / surface_area[i]) *(flux_var_minus[i][j][k]);
@@ -314,8 +315,10 @@ private:
             l_vec[2] = U[i][3];
             rho = U[i][0];
 
-            if (rho < density_floor)
+            if (rho < density_floor){
                 rho = density_floor;
+                U[i][0]=density_floor;
+            }
             vel = cross_product(face_centers[i] / face_centers[i].norm(), l_vec);
             vel /= rho;
             p = pressure_fc(U[i], i);
@@ -512,7 +515,7 @@ private:
     double pressure_fc(std::vector<double> &u, int n_face) // u[4] == energy
     {                                                      // to do: make state_vector a class and turn this into a method
         vector3d<double> l_vec, vel, r;
-        double pressure_floor = 1e-16;
+        double pressure_floor = 1e-12;
         l_vec[0] = u[1];
         l_vec[1] = u[2];
         l_vec[2] = u[3];
@@ -579,9 +582,11 @@ private:
 
             beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
             beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
-            double gam3d = 1 / (2 - gam);
-            gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
-            gam_0 = 2 - 1 / gam_0; // 2d ver
+           //double gam3d = 1 / (2 - gam);
+           // gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
+            //gam_0 = 2 - 1 / gam_0; // 2d ver
+
+            double gam_0=(10-3*beta)/(8-3*beta);
         }
 
         return 1 / (gam_0 - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2;

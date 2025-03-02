@@ -15,7 +15,7 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
     skipstep=1
     
     gam=1.25
-
+    skipf=7
     path='results/'
     #path='plots/big_quad_next/'
     #path='plots/new split test/2 layers/'
@@ -38,6 +38,9 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
     elif(value=='beta'):
         data_rho=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
         label_pr=r'$\beta$ '
+    elif(value=='mach'):
+        data_rho=pd.read_table(path+'mach.dat', header=None, delimiter=r"\s+", skipfooter=skipf)
+        label_pr='Mach number'
     elif(value=='c_s'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
@@ -256,7 +259,7 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
 
 
 #projection_plots("c_s", print_residuals=False, print_log=False, add_streamplot=False)
-projection_plots('rho', print_residuals=False, print_log=False, add_streamplot=False)
+projection_plots('mach', print_residuals=False, print_log=False, add_streamplot=False)
 
 
 

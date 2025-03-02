@@ -10,7 +10,7 @@ class adiabatic : public MUSCL_base
 
 protected:
     std::vector<double> betas;
-    std::ofstream outfile, outfile_p, outfile_omega, outfile_curl, outfile_beta;
+    std::ofstream outfile, outfile_p, outfile_omega, outfile_curl, outfile_beta, outfile_mach;
     std::ofstream outfile_l[3];
     bool accretion_on, friction_on;
     double total_mass, acc_rate, e_acc, omega_acc_abs, tilt_angle, acc_width, area_coeff, alpha;
@@ -30,6 +30,7 @@ public:
         {
             std::cout << "check dim \n";
             stop_check = true;
+            exit(1);
         }
 
         // clean file and append next line
@@ -52,6 +53,10 @@ public:
         outfile_omega.open("results/omega.dat", std::ios::out | std::ios::trunc);
         outfile_omega.close();
         outfile_omega.open("results/omega.dat", std::ios::out | std::ios::app);
+
+        outfile_mach.open("results/mach.dat", std::ios::out | std::ios::trunc);
+        outfile_mach.close();
+        outfile_mach.open("results/mach.dat", std::ios::out | std::ios::app);
 
         std::string adrs[] = {"results/Lx.dat", "results/Ly.dat", "results/Lz.dat"};
 
@@ -148,6 +153,28 @@ public:
             // outfile_p <<U[n_face][4] << " ";
         }
         outfile_p << "\n";
+    };
+
+
+    void write_t_mach()
+    {
+        vector3d<double> vel, l_vec, edge_center;
+        double pres;
+        outfile_mach << this->time() << "  ";
+        for (size_t n_face = 0; n_face < faces.size(); n_face++)
+        {
+
+            l_vec[0] = U[n_face][1];
+            l_vec[1] = U[n_face][2];
+            l_vec[2] = U[n_face][3];
+
+            vel = cross_product(face_centers[n_face] / face_centers[n_face].norm(), l_vec);
+            vel /= (-U[n_face][0]);
+
+            pres = pressure(U[n_face], vel, face_centers[n_face]);
+            outfile_mach << vel.norm()/sqrt(gam*pres/U[n_face][0]) << " ";
+        }
+        outfile_mach << "\n";
     };
 
     void write_t_curl()
@@ -482,46 +509,51 @@ protected:
 
         // friction and depletion
         if (friction_on)
-        {
-            /*double gam3d = 1 / (2 - gam);
-             double rho = gam3d / (2 * gam3d - 1) * g_eff * u[0] * u[0] / u[4];
+        {      
+            //IS99 friction
+            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+            double g_eff = GM - vel.norm() * vel.norm();
+            double gam3d = 1 / (2 - gam);
+            double rho = gam3d / (2 * gam3d - 1) * g_eff * u[0] * u[0] / u[4];
 
-             omega0[0] = 0;
-             omega0[1] = 0;
-             omega0[2] = omega_ns;
-             vel0 = cross_product(omega0, fc_normed);
+            omega0[0] = 0;
+            omega0[1] = 0;
+            omega0[2] = omega_ns;
+            vel0 = cross_product(omega0, fc_normed);
 
-             wr = (vel - vel0);
-             wr *= -alpha * rho * (vel - vel0).norm();
-             l_fr = cross_product(fc_normed, wr);
+            wr = (vel - vel0);
+            wr *= -alpha * rho * (vel - vel0).norm();
+            l_fr = cross_product(fc_normed, wr);
 
-             res[1] += l_fr[0];
-             res[2] += l_fr[1];
-             res[3] += l_fr[2];
-             res[4] += dot_product(wr, vel0);
+            // res[1] += l_fr[0];
+            // res[2] += l_fr[1];
+            // res[3] += l_fr[2];
+            // res[4] += dot_product(wr, vel0);
 
-             // new depletion
+             //new depletion
              res[0] -= alpha * rho * (vel - vel0).norm();
              res[1] -= alpha * rho * (vel - vel0).norm() / u[0] * u[1];
              res[2] -= alpha * rho * (vel - vel0).norm() / u[0] * u[2];
              res[3] -= alpha * rho * (vel - vel0).norm() / u[0] * u[3];
              res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam / ((gam - 1) * u[0]));
 
-             total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];*/
+             total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
+            
 
-            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
-            double g_eff = GM - vel.norm() * vel.norm();
-            res[0] -= 3 / 4. * (1 - beta) * g_eff * u[0];
-            omega0[0] = 0;
-            omega0[1] = 0;
-            omega0[2] = omega_ns;
-            vel0 = cross_product(omega0, fc_normed);
-            l_fr = cross_product(fc_normed, vel * 2 - vel0) * (3 / 4. * (1 - beta) * g_eff * u[0]);
+            //discontinious friction
+            // double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+            // double g_eff = GM - vel.norm() * vel.norm();
+            // res[0] -= 3 / 4. * (1 - beta) * g_eff * u[0];
+            // omega0[0] = 0;
+            // omega0[1] = 0;
+            // omega0[2] = omega_ns;
+            // vel0 = cross_product(omega0, fc_normed);
+            // l_fr = cross_product(fc_normed, vel * 2 - vel0) * (3 / 4. * (1 - beta) * g_eff * u[0]);
 
-            res[1] -= l_fr[0];
-            res[2] -= l_fr[1];
-            res[3] -= l_fr[2];
-            res[4] -= 3 / 4. * (1 - beta) * g_eff * u[0] * (dot_product(vel, vel0) - vel0.norm());
+            // res[1] -= l_fr[0];
+            // res[2] -= l_fr[1];
+            // res[3] -= l_fr[2];
+            // res[4] -= 3 / 4. * (1 - beta) * g_eff * u[0] * (dot_product(vel, vel0) - vel0.norm());
         }
 
         return res;
@@ -583,9 +615,10 @@ protected:
         if (var_gamma)
         {
             double beta = make_beta(u, r);
-            double gam3d = 1 / (2 - gam);
-            double gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
-            gam_0 = 2 - 1 / gam_0; // 2d ver
+            //double gam3d = 1 / (2 - gam);
+            //double gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
+            //gam_0 = 2 - 1 / gam_0; // 2d ver
+            double gam_0=(10-3*beta)/(8-3*beta);
             return gam_0;
         }else{
             return gam;
@@ -640,7 +673,7 @@ protected:
         // double gam_0=gam;// older ver
 
         double theta = std::acos(r[2] / r.norm());
-        double pressure_floor = 1e-16;
+        double pressure_floor = 1e-12;
         double gam_0 = make_gam(u, r);
 
         // return  (u[4] - u[0] * vel.norm() * vel.norm() / 2) * (gam - 1); //v1 = uncompressed
@@ -745,6 +778,7 @@ protected:
             std::cout << "S_L or S_R is NaN in face " << n_face << "\n";
             std::cout << "p_L/R = " << p_L << " " << p_R << " rho_L/R = " << u_L[0] << " " << u_R[0] << "\n";
             stop_check = true;
+            exit(1);
         }
 
         res.resize(2);

@@ -144,7 +144,8 @@ def make_input_5():
 
 def make_input_5_sp_layer():
 
-    gam0=4./3
+    gam0=5./3
+    #gam0=4./3
     #gam0=1.002
     gam=2-1/gam0
 
@@ -164,14 +165,15 @@ def make_input_5_sp_layer():
     omega_ns=0
 
 
-    omega=np.array([0,0,0.01])/V_conv #c
+    #omega=np.array([0,0,0.07])/V_conv #c
 
-    #omega=np.array([0,0,0.01])/V_conv #c
+    omega=np.array([0,0,0.01])/V_conv #c
     
 
 
     #============equal entropy initial version=======================================
-    
+    #rho_0=rho[0]/100000000000
+
     rho_0=rho[0]/130
     #p_0=c_s**2*rho_0/gam
 
@@ -229,6 +231,107 @@ def make_input_5_sp_layer():
     print("E[0]= ", E[0])
 
     pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False, float_format="%.15f")
+
+
+def make_input_5_sp_layer_exp():
+
+    #gam0=5./3
+    gam0=4./3
+    #gam0=1.002
+    gam=2-1/gam0
+
+    #V_conv=0.01
+    V_conv=1
+
+    face_centers=pd.read_table('results/face_centers.dat', header=None, delimiter=r"\s+")
+
+    N=len(face_centers[0])
+    
+    face_centers=np.array(face_centers)
+   
+    turn_angle=0.2
+    turn_matrix=np.matrix([[np.cos(turn_angle),0, np.sin(turn_angle)],[0,1,0],[-np.sin(turn_angle),0, np.cos(turn_angle)]])
+
+
+    rho=np.ones(N) #10^7 g/cm^2
+    #c_s=2*10**(-3)/V_conv 
+    c_s=2*10**(-3)/V_conv 
+    omega_ns=0
+
+
+    omega=np.matmul(turn_matrix,np.array([0,0,0.07]))/V_conv #c
+
+    #omega=np.array([0,0,0.01])/V_conv #c
+    
+
+
+    #============equal entropy initial version=======================================
+    rho_0=rho[0]/100000000000
+
+    #rho_0=rho[0]/130
+    #p_0=c_s**2*rho_0/gam
+
+
+    #rho_0=1e-8
+    p_0=c_s**2*rho_0/gam
+    
+    a_0=np.sqrt(gam*p_0/rho_0)
+    print("c_s=",a_0)
+    M_0=np.linalg.norm(omega)/a_0
+    print('Mach_eq=',M_0)
+   
+
+
+    #M_0=(gam-1)/p_0 *np.linalg.norm(omega)**2
+
+
+
+    theta=[]
+    for fc in face_centers:
+        theta.append(np.arccos( np.matmul(turn_matrix, fc/np.linalg.norm(fc))[0,2] ))
+   
+    theta=np.array(theta)
+
+
+
+    rho=rho_0*(1+(gam-1)/2*M_0**2*np.sin(theta)**2)**(1/(gam-1))
+    p=p_0*(1+(gam-1)/2*M_0**2*np.sin(theta)**2)**(gam/(gam-1))
+
+    
+    print("p[0]= ", p[0])
+
+
+
+    print('rho_avg=',np.sum(rho)/len(face_centers))
+
+
+    face_centers=np.array(face_centers)
+
+    l=[]
+    v=[]
+
+    for face_num, R in enumerate(face_centers):
+        #==========================================================
+        #omega=np.array([0,0,0.03])*np.sin(theta[face_num])**2
+        #==========================================================
+        l.append(rho[face_num]*np.cross(R,np.cross(omega,R))/(np.linalg.norm(R)**2))
+        v.append(np.cross(omega,R)/np.linalg.norm(R))
+
+    print('mean_vel= ',np.mean(np.linalg.norm(v, axis=1)))
+    print('mean_Mach= ',np.mean(np.linalg.norm(v, axis=1)/np.sqrt(gam*p/rho)))
+    
+
+    l=np.array(l)
+    v=np.array(v)
+
+    E=1/(gam-1)*p+rho*((np.linalg.norm(v, axis=1)**2)/2-np.ones(N)*omega_ns**2*(np.sin(theta)**2)/2)
+    if(E.any()<0):
+        print('Energy<0!!')
+
+    print("E[0]= ", E[0])
+
+    pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False, float_format="%.15f")
+
 
 
 def make_input_5_sp_layer_diff_rot():
@@ -295,6 +398,8 @@ def make_input_5_sp_layer_diff_rot():
     print("E[0]= ", E[0])
 
     pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False, float_format="%.15f")
+
+
 
 
 
@@ -391,6 +496,7 @@ def make_input_5_const_entr():
 #make_input_5_const_entr()
 
 make_input_5_sp_layer()
+#make_input_5_sp_layer_exp()
 #make_input_5_sp_layer_diff_rot()
 
 
