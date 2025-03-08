@@ -258,8 +258,8 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
 
 
 
-#projection_plots("c_s", print_residuals=False, print_log=False, add_streamplot=False)
-projection_plots('mach', print_residuals=False, print_log=False, add_streamplot=False)
+projection_plots("rho", print_residuals=False, print_log=False, add_streamplot=False)
+#projection_plots('mach', print_residuals=False, print_log=False, add_streamplot=False)
 
 
 

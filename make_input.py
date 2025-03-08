@@ -144,8 +144,8 @@ def make_input_5():
 
 def make_input_5_sp_layer():
 
-    gam0=5./3
     #gam0=4./3
+    gam0=5./3
     #gam0=1.002
     gam=2-1/gam0
 
@@ -165,15 +165,14 @@ def make_input_5_sp_layer():
     omega_ns=0
 
 
-    #omega=np.array([0,0,0.07])/V_conv #c
-
     omega=np.array([0,0,0.01])/V_conv #c
+
+    #omega=np.array([0,0,0.01])/V_conv #c
     
 
 
     #============equal entropy initial version=======================================
-    #rho_0=rho[0]/100000000000
-
+    
     rho_0=rho[0]/130
     #p_0=c_s**2*rho_0/gam
 
@@ -209,6 +208,7 @@ def make_input_5_sp_layer():
 
     l=[]
     v=[]
+   
 
     for face_num, R in enumerate(face_centers):
         #==========================================================

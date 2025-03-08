@@ -65,8 +65,9 @@ public:
         nlohmann::json parameters = nlohmann::json::parse(ifs);
 
         CFL = parameters["CFL"];
+        var_gamma = parameters["var_gamma"];
 
-        density_floor = 1e-15;
+        density_floor = 1e-9;
         N = 1;
         h0 = 10;
         for (size_t n_face = 0; n_face < this->n_faces(); n_face++)
@@ -515,7 +516,7 @@ private:
     double pressure_fc(std::vector<double> &u, int n_face) // u[4] == energy
     {                                                      // to do: make state_vector a class and turn this into a method
         vector3d<double> l_vec, vel, r;
-        double pressure_floor = 1e-12;
+        double pressure_floor = 1e-16;
         l_vec[0] = u[1];
         l_vec[1] = u[2];
         l_vec[2] = u[3];
@@ -586,8 +587,10 @@ private:
            // gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
             //gam_0 = 2 - 1 / gam_0; // 2d ver
 
-            double gam_0=(10-3*beta)/(8-3*beta);
+            gam_0=(10-3*beta)/(8-3*beta);
+            
         }
+       
 
         return 1 / (gam_0 - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2;
     }

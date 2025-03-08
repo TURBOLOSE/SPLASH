@@ -446,20 +446,23 @@ protected:
         double beta = make_beta(u, fc_normed);
         betas[n_face] = beta;
 
-        double gam_0;
+        /*double gam_0;
         double gam3d = 1 / (2 - gam);
         if(var_gamma){
              gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
         }
-         gam_0 = 2 - 1 / gam_0; // 2d ver
+        gam_0 = 2 - 1 / gam_0; // 2d ver*/
+        double gam_0=make_gam(u,fc_normed);
+
         
        
        
+        double adj_coeff=1.00045; //just in case of small mass error
 
         if (accretion_on)
         {
 
-            res[0] = 1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
+            res[0] = adj_coeff * 1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
                      std::exp(-(theta_acc - mu) * (theta_acc - mu) / (2 * sigma * sigma));
 
             // normal distribution for smooth accretion
@@ -488,12 +491,13 @@ protected:
             if (!friction_on)
             {
                 double dmdt = -(fall_eff * acc_rate * 4 * M_PI) / total_mass * u[0]; // time constant in T_unit^{-1} times surf density
-                // double dmdt=-(fall_eff*adj_acc_rate*area_coeff*4*M_PI)/total_mass * u[0]; //time constant in T_unit^{-1} times surf density
+                //double dmdt=-(fall_eff*acc_rate*area_coeff*4*M_PI)/total_mass * u[0]; //time constant in T_unit^{-1} times surf density
                 res[0] += dmdt;
                 res[1] += dmdt * rxv[0];
                 res[2] += dmdt * rxv[1];
                 res[3] += dmdt * rxv[2];
                 res[4] += dmdt * (gam_0 / (gam_0 - 1) * u[4] / u[0] + (vel.norm() * vel.norm()) / 2.);
+                total_mass_gain += dmdt * surface_area[n_face];
             }
 
             // energy sink term (radiation energy diffusion)
@@ -513,7 +517,7 @@ protected:
             //IS99 friction
             double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
             double g_eff = GM - vel.norm() * vel.norm();
-            double gam3d = 1 / (2 - gam);
+            double gam3d = 1 / (2 - gam_0);
             double rho = gam3d / (2 * gam3d - 1) * g_eff * u[0] * u[0] / u[4];
 
             omega0[0] = 0;
@@ -535,7 +539,7 @@ protected:
              res[1] -= alpha * rho * (vel - vel0).norm() / u[0] * u[1];
              res[2] -= alpha * rho * (vel - vel0).norm() / u[0] * u[2];
              res[3] -= alpha * rho * (vel - vel0).norm() / u[0] * u[3];
-             res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam / ((gam - 1) * u[0]));
+             res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
 
              total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
             
@@ -563,7 +567,6 @@ protected:
     {
 
         vector3d<double> l_vec, vel, r_normed;
-
         l_vec[0] = u[1];
         l_vec[1] = u[2];
         l_vec[2] = u[3];
@@ -571,6 +574,7 @@ protected:
         r_normed = r / r.norm();
         vel = cross_product(r_normed, l_vec);
         vel /= (-u[0]);
+
 
         double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
         double g_eff = GM - vel.norm() * vel.norm();
@@ -598,12 +602,12 @@ protected:
         beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
         // std::cout << "3: " << beta << "\n";
 
-        double beta_ceil = 1 - 1e-10, beta_floor = 0;
+        double beta_ceil = 1 - 1e-15, beta_floor = 0;
 
-        if (beta < beta_floor || std::isnan(beta)) // beta limitations
+        if (beta < beta_floor ) // beta limitations
             beta = beta_floor;
 
-        if (beta > beta_ceil)
+        if (beta > beta_ceil|| std::isnan(beta))
             beta = beta_ceil;
 
         return beta;
@@ -673,9 +677,11 @@ protected:
         // double gam_0=gam;// older ver
 
         double theta = std::acos(r[2] / r.norm());
-        double pressure_floor = 1e-12;
+        double pressure_floor = 1e-16;
         double gam_0 = make_gam(u, r);
 
+
+        
         // return  (u[4] - u[0] * vel.norm() * vel.norm() / 2) * (gam - 1); //v1 = uncompressed
         // return (u[4] - u[0] * vel.norm() * vel.norm() / 2) * (gam - 1) / gam; // v2 = different P
         // return (u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1) / gam; // v3 = compressed star + sin
@@ -725,6 +731,8 @@ protected:
         double gam_L=gam;
         double gam_R=gam;
         
+        
+
         double z = (gam - 1) / (2 * gam);
 
         if(var_gamma){
@@ -751,7 +759,7 @@ protected:
         }
         else
         {
-            q_R = std::sqrt(1 + (gam + 1) / (2 * gam) * (p_star / p_R - 1));
+            q_R = std::sqrt(1 + ((gam_L+gam_R)/2. + 1) / (2 * (gam_L+gam_R)/2.) * (p_star / p_R - 1));
             if (std::isnan(q_R) || std::isinf(q_R))
                 q_R = 1;
         }
@@ -762,7 +770,7 @@ protected:
         }
         else
         {
-            q_L = std::sqrt(1 + (gam + 1) / (2 * gam) * (p_star / p_L - 1));
+            q_L = std::sqrt(1 + ((gam_L+gam_R)/2. + 1) / (2 * (gam_L+gam_R)/2.) * (p_star / p_L - 1));
             if (std::isnan(q_L) || std::isinf(q_L))
                 q_L = 1;
         }

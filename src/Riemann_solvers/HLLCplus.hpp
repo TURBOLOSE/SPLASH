@@ -90,14 +90,10 @@ protected:
         double phi_L = u_L[0] * (S_L - V_L);
         double phi_R = u_R[0] * (S_R - V_R);
 
-        double gam_L=gam;
-        double gam_R=gam;
-        
 
-        if(var_gamma){
-            gam_L=make_gam(u_L,edge_center);
-            gam_R=make_gam(u_R,edge_center);
-        }
+        double gam_L=make_gam(u_L,edge_center);
+        double gam_R=make_gam(u_R,edge_center);
+        
 
         double a_L = std::sqrt(gam_L * p_L / u_L[0]);
         double a_R = std::sqrt(gam_R * p_R / u_R[0]);
