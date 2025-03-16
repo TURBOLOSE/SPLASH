@@ -580,12 +580,24 @@ private:
             {
                 beta = 1 - pow(1 / C, 4);
             }
+            
+            double beta_ceil = 1 - 1e-9, beta_floor = 0;
+
+            if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
+            beta = beta_ceil;
 
             beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
             beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
            //double gam3d = 1 / (2 - gam);
            // gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
             //gam_0 = 2 - 1 / gam_0; // 2d ver
+
+            if (beta < beta_floor ) // beta limitations
+            beta = beta_floor;
+
+             if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
+            beta = beta_ceil;
+
 
             gam_0=(10-3*beta)/(8-3*beta);
             

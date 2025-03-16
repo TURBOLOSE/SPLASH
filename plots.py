@@ -15,7 +15,8 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
     skipstep=1
     
     gam=1.25
-    skipf=7
+    skipf=0
+    #path='plots/article plots updated/'
     path='results/'
     #path='plots/big_quad_next/'
     #path='plots/new split test/2 layers/'
@@ -213,9 +214,14 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
     colorm = plt.get_cmap('viridis')
     min_rho=np.min( data_rho.loc[:maxstep,1:len(x_plot)])
     max_rho=np.max( data_rho.loc[:maxstep,1:len(x_plot)])
+
+    mask=data_rho.loc[:maxstep,1:len(x_plot)]>0
+    print(np.min(data_rho.loc[:maxstep,1:len(x_plot)][mask]) )
+
+    print(min_rho)
     #min_rho=0
-    #max_rho=2e-4
-    #max_rho=1.8
+    #max_rho=0.00015
+    #max_rho=0.8
 
     #data_rho.loc[:,1:]*=2
     #max_rho=50
@@ -258,7 +264,7 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
 
 
 
-projection_plots("rho", print_residuals=False, print_log=False, add_streamplot=False)
+projection_plots("beta", print_residuals=False, print_log=False, add_streamplot=False)
 #projection_plots('mach', print_residuals=False, print_log=False, add_streamplot=False)
 
 
@@ -347,8 +353,10 @@ def vel_plot():
     #turn_angle=np.pi/2
 
     turn_angle=0
+
+    path_to_res='plots/article plots updated/'
     #path_to_res='results/'
-    path_to_res='plots/big_quad_next/'
+    #path_to_res='plots/big_quad_next/'
     #path_to_res='plots/big_sim/'
     #path_to_res='plots/0.4c crashes/time series/'
     

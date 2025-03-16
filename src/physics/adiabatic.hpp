@@ -594,6 +594,11 @@ protected:
             beta = 1 - pow(2 / C, 4);
         }
 
+        double beta_ceil = 1 - 1e-9, beta_floor = 0;
+        
+        if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
+            beta = beta_ceil;
+
         // 2 Newton iterations
 
         // std::cout << "1: " << beta << " ";
@@ -602,12 +607,12 @@ protected:
         beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
         // std::cout << "3: " << beta << "\n";
 
-        double beta_ceil = 1 - 1e-15, beta_floor = 0;
+        
 
         if (beta < beta_floor ) // beta limitations
             beta = beta_floor;
 
-        if (beta > beta_ceil|| std::isnan(beta))
+        if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
             beta = beta_ceil;
 
         return beta;
