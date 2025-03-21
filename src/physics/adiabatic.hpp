@@ -442,8 +442,41 @@ protected:
         double sigma = acc_width / 2.355; // FWHM formula
 
         double theta_acc = std::acos(fc_normed[1] * std::sin(tilt_angle) + fc_normed[2] * std::cos(tilt_angle));
+        
+        double GM = 0.217909;
+        double g_eff = GM - vel.norm() * vel.norm();
+        double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
+        double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
+        // new expression for C
+        double C = 12. / 5 * k_m * u[0] / (3 * u[4]) * pow(3. / 4 * c_sigma * g_eff * u[0], 1. / 4);
+        double beta_switch = 0.5479; // switch point for initial function
+        double C_switch = beta_switch / (1 - beta_switch);
+        double beta, gam_0;
+        
+        if (C <= C_switch)
+        {
+            beta = C / (1 + C);
+        }
+        else
+        {
+            beta = 1 - pow(1 / C, 4);
+        }
+        
+        double beta_ceil = 1 - 1e-9, beta_floor = 0;
 
-        double beta = make_beta(u, fc_normed);
+        if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
+        beta = beta_ceil;
+
+        beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
+        beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
+        if (beta < beta_floor ) // beta limitations
+        beta = beta_floor;
+
+            if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
+        beta = beta_ceil;
+        gam_0=(10-3*beta)/(8-3*beta);
+
+
         betas[n_face] = beta;
 
         /*double gam_0;
@@ -452,8 +485,7 @@ protected:
              gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
         }
         gam_0 = 2 - 1 / gam_0; // 2d ver*/
-        double gam_0=make_gam(u,fc_normed);
-
+      
         
        
        

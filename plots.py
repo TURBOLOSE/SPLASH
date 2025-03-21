@@ -12,12 +12,13 @@ from scipy.interpolate import griddata
 
 def projection_plots(value, print_residuals:bool=False, print_log:bool=False, add_streamplot:bool=False): 
     #value = rho,p,omega
-    skipstep=1
+    skipstep=10
     
     gam=1.25
     skipf=0
-    #path='plots/article plots updated/'
     path='results/'
+    #path='plots/article plots updated/'
+    #path='plots/article_sim_mk1/'
     #path='plots/big_quad_next/'
     #path='plots/new split test/2 layers/'
     #path='plots/shock_test/'
@@ -221,7 +222,7 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
     print(min_rho)
     #min_rho=0
     #max_rho=0.00015
-    #max_rho=0.8
+    #max_rho=0.05
 
     #data_rho.loc[:,1:]*=2
     #max_rho=50
