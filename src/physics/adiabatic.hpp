@@ -412,6 +412,7 @@ protected:
     std::vector<double> source(std::vector<double> u, int n_face)
     { // du/dt
       // due to the weird reconstruction algorithm, u[4] here is the pressure \Pi
+      //source should still return vector where res[4]=dE/dt
 
         static double total_mass_gain = 0, total_mass_gain_old = 0;
         static double total_mass_loss = 0;
@@ -469,6 +470,7 @@ protected:
 
         beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
         beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
+        
         if (beta < beta_floor ) // beta limitations
         beta = beta_floor;
 
@@ -566,8 +568,9 @@ protected:
             // res[3] += l_fr[2];
             // res[4] += dot_product(wr, vel0);
 
-             //new depletion
-             res[0] -= alpha * rho * (vel - vel0).norm();
+
+             //res[0] -= alpha * rho * (vel - vel0).norm(); //old versin
+             res[0] -= alpha * u[0] * omega_acc_abs;
              res[1] -= alpha * rho * (vel - vel0).norm() / u[0] * u[1];
              res[2] -= alpha * rho * (vel - vel0).norm() / u[0] * u[2];
              res[3] -= alpha * rho * (vel - vel0).norm() / u[0] * u[3];

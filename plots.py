@@ -12,13 +12,13 @@ from scipy.interpolate import griddata
 
 def projection_plots(value, print_residuals:bool=False, print_log:bool=False, add_streamplot:bool=False): 
     #value = rho,p,omega
-    skipstep=10
+    skipstep=1
     
     gam=1.25
     skipf=0
     path='results/'
     #path='plots/article plots updated/'
-    #path='plots/article_sim_mk1/'
+    #path='plots/article_sim_mk2/'
     #path='plots/big_quad_next/'
     #path='plots/new split test/2 layers/'
     #path='plots/shock_test/'
@@ -213,16 +213,13 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
     # data_rho.loc[:,1:len(faces)]=data_p.loc[:,1:len(faces)]/data_rho.loc[:,1:len(faces)]**(1.4)
     #=====================================================
     colorm = plt.get_cmap('viridis')
-    min_rho=np.min( data_rho.loc[:maxstep,1:len(x_plot)])
-    max_rho=np.max( data_rho.loc[:maxstep,1:len(x_plot)])
+    #min_rho=np.min( data_rho.loc[:maxstep,1:len(x_plot)])
+    #max_rho=np.max( data_rho.loc[:maxstep,1:len(x_plot)])
+    
+    #min_rho, max_rho=np.quantile(data_rho.loc[:maxstep,1:len(x_plot)],0.05),np.quantile(data_rho.loc[:maxstep,1:len(x_plot)],0.95)
 
-    mask=data_rho.loc[:maxstep,1:len(x_plot)]>0
-    print(np.min(data_rho.loc[:maxstep,1:len(x_plot)][mask]) )
-
-    print(min_rho)
-    #min_rho=0
-    #max_rho=0.00015
-    #max_rho=0.05
+    min_rho=0
+    max_rho=0.1
 
     #data_rho.loc[:,1:]*=2
     #max_rho=50
@@ -265,7 +262,7 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
 
 
 
-projection_plots("beta", print_residuals=False, print_log=False, add_streamplot=False)
+projection_plots("rho", print_residuals=False, print_log=False, add_streamplot=False)
 #projection_plots('mach', print_residuals=False, print_log=False, add_streamplot=False)
 
 
@@ -348,14 +345,15 @@ integrated_plot('rho')
 
 
 
-def vel_plot():
+def vel_plot( remove_avg_omega:bool=False):
     gam=1.25
 
     #turn_angle=np.pi/2
 
     turn_angle=0
 
-    path_to_res='plots/article plots updated/'
+    path_to_res='plots/article_sim_mk2/'
+    #path_to_res='plots/article plots updated/'
     #path_to_res='results/'
     #path_to_res='plots/big_quad_next/'
     #path_to_res='plots/big_sim/'
@@ -485,7 +483,8 @@ def vel_plot():
     phi_d=(-np.sin(phi_fc)*vel[:,0]+np.cos(phi_fc)*vel[:,1])/np.sin(theta_fc)
 
 
-    #phi_d-=np.average(phi_d)
+    if(remove_avg_omega):
+        phi_d-=np.average(phi_d)
 
 
     for num,ph in enumerate(phi_d):
@@ -532,6 +531,7 @@ def vel_plot():
     v_min=np.min(v)
     v_max=np.max(v)
 
+
     norm2 = mpl.colors.Normalize(vmin=v_min, vmax=v_max)
 
 
@@ -541,7 +541,7 @@ def vel_plot():
 
     plt.subplots_adjust(hspace=10)
     
-    fig.suptitle('t='+"{:10.4f}".format(0.7920)+" s")
+    fig.suptitle('t='+"{:10.4f}".format(1.3958)+" s")
     ax[0].set_xlabel(r'$\varphi / \sqrt{2}$', fontsize=25)
     ax[0].set_ylabel(r'$\sqrt{2}  \cos(\theta )$', fontsize=25)
     #for face_num,face in enumerate(faces):
@@ -569,5 +569,5 @@ def vel_plot():
 
 
 
-vel_plot()
+vel_plot(remove_avg_omega=True)
 
