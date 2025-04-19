@@ -574,7 +574,8 @@ protected:
              res[1] -= alpha * rho * (vel - vel0).norm() / u[0] * u[1];
              res[2] -= alpha * rho * (vel - vel0).norm() / u[0] * u[2];
              res[3] -= alpha * rho * (vel - vel0).norm() / u[0] * u[3];
-             res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
+             res[4] -= alpha * u[0] * omega_acc_abs * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
+             //res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
 
              total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
             
@@ -672,7 +673,7 @@ protected:
     double extra_dt_constr()
     {
         double dt_new = 1e20;
-        /*vector3d<double> fc_normed, vel, l_vec, omega0, vel0;
+        vector3d<double> fc_normed, vel, l_vec, omega0, vel0;
 
         if (friction_on)
         {
@@ -683,6 +684,8 @@ protected:
                 l_vec[0] = U[i][1];
                 l_vec[1] = U[i][2];
                 l_vec[2] = U[i][3];
+                double gam_0=make_gam(U[i], fc_normed);
+
 
                 vel = cross_product(fc_normed, l_vec);
                 vel /= (-U[i][0]);
@@ -692,13 +695,38 @@ protected:
                 omega0[2] = omega_ns;
                 vel0 = cross_product(omega0, fc_normed);
                 double press = pressure(U[i], vel, fc_normed);
-                double gam3d = 1 / (2 - gam);
+                double gam3d = 1 / (2 - gam_0);
                 double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
                 double g_eff = GM - vel.norm() * vel.norm();
                 double rho = gam3d / (2 * gam3d - 1) * g_eff * U[i][0] * U[i][0] / press;
+                double d1,d2,d3,d4;
 
-                if (dt_new > 0.01 * U[i][0] / (alpha * rho * (vel - vel0).norm()))
-                    dt_new = 0.01 * U[i][0] / (alpha * rho * (vel - vel0).norm());
+                // if (dt_new > 0.01 * U[i][0] / (alpha * rho * (vel - vel0).norm()))
+                //     dt_new = 0.01 * U[i][0] / (alpha * rho * (vel - vel0).norm());
+
+
+                d1 = alpha * rho * (vel - vel0).norm() / U[i][0] *U[i][1];
+                d2 = alpha * rho * (vel - vel0).norm() / U[i][0] * U[i][2];
+                d3 = alpha * rho * (vel - vel0).norm() / U[i][0] * U[i][3];
+                d4 =alpha * U[i][0] * omega_acc_abs * 
+                (vel.norm() * vel.norm() / 2. + U[i][4] * gam_0 / ((gam_0 - 1) * U[i][0]));
+
+                if (dt_new > 0.1 * 1 / (alpha * omega_acc_abs))
+                dt_new = 0.1 *1 /(alpha * omega_acc_abs) ;
+
+                if(dt_new > 0.1 * U[i][1]/d1)
+                dt_new = 0.1 * U[i][1]/d1;
+
+                if(dt_new > 0.1 * U[i][2]/d2)
+                dt_new = 0.1 * U[i][2]/d2;
+
+                if(dt_new > 0.1 * U[i][3]/d3)
+                dt_new = 0.1 * U[i][3]/d3;
+
+                if(dt_new > 0.1 * U[i][4]/d4)
+                dt_new = 0.1 * U[i][4]/d4;
+
+            
             }
         }
 
@@ -707,7 +735,7 @@ protected:
             stop_check = true;
             dt_new = 1e20;
         }
-        */
+        
         return dt_new;
     }
 

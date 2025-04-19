@@ -12,7 +12,7 @@ from scipy.interpolate import griddata
 
 def projection_plots(value, print_residuals:bool=False, print_log:bool=False, add_streamplot:bool=False): 
     #value = rho,p,omega
-    skipstep=1
+    skipstep=2
     
     gam=1.25
     skipf=0
@@ -213,15 +213,14 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
     # data_rho.loc[:,1:len(faces)]=data_p.loc[:,1:len(faces)]/data_rho.loc[:,1:len(faces)]**(1.4)
     #=====================================================
     colorm = plt.get_cmap('viridis')
-    #min_rho=np.min( data_rho.loc[:maxstep,1:len(x_plot)])
-    #max_rho=np.max( data_rho.loc[:maxstep,1:len(x_plot)])
+    min_rho=np.min( data_rho.loc[:maxstep,1:len(x_plot)])
+    max_rho=np.max( data_rho.loc[:maxstep,1:len(x_plot)])
     
     #min_rho, max_rho=np.quantile(data_rho.loc[:maxstep,1:len(x_plot)],0.05),np.quantile(data_rho.loc[:maxstep,1:len(x_plot)],0.95)
 
-    min_rho=0
-    max_rho=0.1
-
     #data_rho.loc[:,1:]*=2
+
+    #min_rho=1
     #max_rho=50
 
     norm = mpl.colors.Normalize(vmin=min_rho, vmax=max_rho)
@@ -262,8 +261,8 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
 
 
 
-projection_plots("rho", print_residuals=False, print_log=False, add_streamplot=False)
-#projection_plots('mach', print_residuals=False, print_log=False, add_streamplot=False)
+#projection_plots("rho", print_residuals=False, print_log=False, add_streamplot=False)
+projection_plots('vel_abs', print_residuals=False, print_log=False, add_streamplot=False)
 
 
 
