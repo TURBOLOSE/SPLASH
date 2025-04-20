@@ -121,6 +121,12 @@ public:
         if (dt > extra_dt)
             dt = extra_dt;
 
+        //std::cout<<extra_dt<<"\n";
+
+
+        // if(steps==0)
+        // dt=1e-2;
+
         find_U_edges();
         find_flux_var();
 

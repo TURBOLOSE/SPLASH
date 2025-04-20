@@ -174,7 +174,10 @@ def make_input_5_sp_layer():
 
     #============equal entropy initial version=======================================
     
+
+    #rho_0=rho[0]/1e5
     rho_0=rho[0]/130
+
     #p_0=c_s**2*rho_0/gam
 
 

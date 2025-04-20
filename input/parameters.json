@@ -3,10 +3,10 @@
     "CFL": 0.2,
     "dt": 0.25,
     "t_max": 6000,
-    "maxstep":25001,
-    "skipstep": 300,
+    "maxstep":24001,
+    "skipstep": 30,
     "gam3d":1.6666666666666666666666666,
-    "omega_ns":0,
+    "omega_ns":0.01,
     "threads":8,
     "accretion_on":true,
     "accretion_rate":3.25e-7,
@@ -14,7 +14,7 @@
     "omega_acc_abs":0.4,
     "tilt_angle":0.1,
     "acc_width":0.1,
-    "friction_on":true,
+    "friction_on":false,
     "alpha":1e-3,
     "var_gamma":true
 }

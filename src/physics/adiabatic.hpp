@@ -155,7 +155,6 @@ public:
         outfile_p << "\n";
     };
 
-
     void write_t_mach()
     {
         vector3d<double> vel, l_vec, edge_center;
@@ -172,7 +171,7 @@ public:
             vel /= (-U[n_face][0]);
 
             pres = pressure(U[n_face], vel, face_centers[n_face]);
-            outfile_mach << vel.norm()/sqrt(gam*pres/U[n_face][0]) << " ";
+            outfile_mach << vel.norm() / sqrt(gam * pres / U[n_face][0]) << " ";
         }
         outfile_mach << "\n";
     };
@@ -292,7 +291,6 @@ public:
         double flux_tot_0 = 0, flux_tot_45 = 0, flux_tot_90 = 0, flux_tot_180 = 0;
         double phi_fc, theta_fc, d_vec, cos_alpha, PI;
 
-
         for (size_t n_face = 0; n_face < this->n_faces(); n_face++)
         {
             phi_fc = std::atan2(face_centers[n_face][1] / face_centers[n_face].norm(),
@@ -307,7 +305,6 @@ public:
             vel /= (-U[n_face][0]);
             PI = pressure(U[n_face], vel, face_centers[n_face] / face_centers[n_face].norm());
 
-            
             if (phi_fc < M_PI / 2 && phi_fc > -M_PI / 2)
             {
                 d_vec = dot_product(obs_vector_0, face_centers[n_face] / face_centers[n_face].norm());
@@ -412,7 +409,7 @@ protected:
     std::vector<double> source(std::vector<double> u, int n_face)
     { // du/dt
       // due to the weird reconstruction algorithm, u[4] here is the pressure \Pi
-      //source should still return vector where res[4]=dE/dt
+      // source should still return vector where res[4]=dE/dt
 
         static double total_mass_gain = 0, total_mass_gain_old = 0;
         static double total_mass_loss = 0;
@@ -443,7 +440,7 @@ protected:
         double sigma = acc_width / 2.355; // FWHM formula
 
         double theta_acc = std::acos(fc_normed[1] * std::sin(tilt_angle) + fc_normed[2] * std::cos(tilt_angle));
-        
+
         double GM = 0.217909;
         double g_eff = GM - vel.norm() * vel.norm();
         double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
@@ -453,7 +450,7 @@ protected:
         double beta_switch = 0.5479; // switch point for initial function
         double C_switch = beta_switch / (1 - beta_switch);
         double beta, gam_0;
-        
+
         if (C <= C_switch)
         {
             beta = C / (1 + C);
@@ -462,22 +459,21 @@ protected:
         {
             beta = 1 - pow(1 / C, 4);
         }
-        
+
         double beta_ceil = 1 - 1e-9, beta_floor = 0;
 
-        if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
-        beta = beta_ceil;
+        if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
+            beta = beta_ceil;
 
         beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
         beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
-        
-        if (beta < beta_floor ) // beta limitations
-        beta = beta_floor;
 
-            if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
-        beta = beta_ceil;
-        gam_0=(10-3*beta)/(8-3*beta);
+        if (beta < beta_floor) // beta limitations
+            beta = beta_floor;
 
+        if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
+            beta = beta_ceil;
+        gam_0 = (10 - 3 * beta) / (8 - 3 * beta);
 
         betas[n_face] = beta;
 
@@ -487,11 +483,8 @@ protected:
              gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
         }
         gam_0 = 2 - 1 / gam_0; // 2d ver*/
-      
-        
-       
-       
-        double adj_coeff=1.00045; //just in case of small mass error
+
+        double adj_coeff = 1.00045; // just in case of small mass error
 
         if (accretion_on)
         {
@@ -525,7 +518,7 @@ protected:
             if (!friction_on)
             {
                 double dmdt = -(fall_eff * acc_rate * 4 * M_PI) / total_mass * u[0]; // time constant in T_unit^{-1} times surf density
-                //double dmdt=-(fall_eff*acc_rate*area_coeff*4*M_PI)/total_mass * u[0]; //time constant in T_unit^{-1} times surf density
+                // double dmdt=-(fall_eff*acc_rate*area_coeff*4*M_PI)/total_mass * u[0]; //time constant in T_unit^{-1} times surf density
                 res[0] += dmdt;
                 res[1] += dmdt * rxv[0];
                 res[2] += dmdt * rxv[1];
@@ -547,8 +540,8 @@ protected:
 
         // friction and depletion
         if (friction_on)
-        {      
-            //IS99 friction
+        {
+            // IS99 friction
             double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
             double g_eff = GM - vel.norm() * vel.norm();
             double gam3d = 1 / (2 - gam_0);
@@ -568,27 +561,25 @@ protected:
             // res[3] += l_fr[2];
             // res[4] += dot_product(wr, vel0);
 
+            // res[0] -= alpha * rho * (vel - vel0).norm(); //old versin
+            res[0] -= alpha * u[0] * omega_acc_abs;
+            res[1] -= alpha * rho * (vel - vel0).norm() / u[0] * u[1];
+            res[2] -= alpha * rho * (vel - vel0).norm() / u[0] * u[2];
+            res[3] -= alpha * rho * (vel - vel0).norm() / u[0] * u[3];
+            res[4] -= alpha * u[0] * omega_acc_abs * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
+            // res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
 
-             //res[0] -= alpha * rho * (vel - vel0).norm(); //old versin
-             res[0] -= alpha * u[0] * omega_acc_abs;
-             res[1] -= alpha * rho * (vel - vel0).norm() / u[0] * u[1];
-             res[2] -= alpha * rho * (vel - vel0).norm() / u[0] * u[2];
-             res[3] -= alpha * rho * (vel - vel0).norm() / u[0] * u[3];
-             res[4] -= alpha * u[0] * omega_acc_abs * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
-             //res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
+            total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
 
-             total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
-            
-
-            //discontinious friction
-            // double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
-            // double g_eff = GM - vel.norm() * vel.norm();
-            // res[0] -= 3 / 4. * (1 - beta) * g_eff * u[0];
-            // omega0[0] = 0;
-            // omega0[1] = 0;
-            // omega0[2] = omega_ns;
-            // vel0 = cross_product(omega0, fc_normed);
-            // l_fr = cross_product(fc_normed, vel * 2 - vel0) * (3 / 4. * (1 - beta) * g_eff * u[0]);
+            // discontinious friction
+            //  double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+            //  double g_eff = GM - vel.norm() * vel.norm();
+            //  res[0] -= 3 / 4. * (1 - beta) * g_eff * u[0];
+            //  omega0[0] = 0;
+            //  omega0[1] = 0;
+            //  omega0[2] = omega_ns;
+            //  vel0 = cross_product(omega0, fc_normed);
+            //  l_fr = cross_product(fc_normed, vel * 2 - vel0) * (3 / 4. * (1 - beta) * g_eff * u[0]);
 
             // res[1] -= l_fr[0];
             // res[2] -= l_fr[1];
@@ -611,7 +602,6 @@ protected:
         vel = cross_product(r_normed, l_vec);
         vel /= (-u[0]);
 
-
         double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
         double g_eff = GM - vel.norm() * vel.norm();
         double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
@@ -631,8 +621,8 @@ protected:
         }
 
         double beta_ceil = 1 - 1e-9, beta_floor = 0;
-        
-        if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
+
+        if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
             beta = beta_ceil;
 
         // 2 Newton iterations
@@ -643,12 +633,10 @@ protected:
         beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
         // std::cout << "3: " << beta << "\n";
 
-        
-
-        if (beta < beta_floor ) // beta limitations
+        if (beta < beta_floor) // beta limitations
             beta = beta_floor;
 
-        if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
+        if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
             beta = beta_ceil;
 
         return beta;
@@ -660,12 +648,14 @@ protected:
         if (var_gamma)
         {
             double beta = make_beta(u, r);
-            //double gam3d = 1 / (2 - gam);
-            //double gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
-            //gam_0 = 2 - 1 / gam_0; // 2d ver
-            double gam_0=(10-3*beta)/(8-3*beta);
+            // double gam3d = 1 / (2 - gam);
+            // double gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
+            // gam_0 = 2 - 1 / gam_0; // 2d ver
+            double gam_0 = (10 - 3 * beta) / (8 - 3 * beta);
             return gam_0;
-        }else{
+        }
+        else
+        {
             return gam;
         }
     }
@@ -673,10 +663,21 @@ protected:
     double extra_dt_constr()
     {
         double dt_new = 1e20;
-        vector3d<double> fc_normed, vel, l_vec, omega0, vel0;
+        vector3d<double> fc_normed, vel, l_vec, omega0, vel0, omega_acc, omxr, rxv;
+        double d0,d1, d2, d3, d4;
+            omega_acc[0] = 0;
+            omega_acc[1] = std::sin(tilt_angle) * omega_acc_abs;
+            omega_acc[2] = std::cos(tilt_angle) * omega_acc_abs;
 
-        if (friction_on)
-        {
+            omega0[0] = 0;
+            omega0[1] = 0;
+            omega0[2] = omega_ns;
+
+            double mu = M_PI / 2;
+            double sigma = acc_width / 2.355; // FWHM formula
+
+            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+
             for (size_t i = 0; i < this->n_faces(); i++)
             {
 
@@ -684,58 +685,97 @@ protected:
                 l_vec[0] = U[i][1];
                 l_vec[1] = U[i][2];
                 l_vec[2] = U[i][3];
-                double gam_0=make_gam(U[i], fc_normed);
-
+                double gam_0 = make_gam(U[i], fc_normed);
 
                 vel = cross_product(fc_normed, l_vec);
                 vel /= (-U[i][0]);
 
-                omega0[0] = 0;
-                omega0[1] = 0;
-                omega0[2] = omega_ns;
+               
                 vel0 = cross_product(omega0, fc_normed);
                 double press = pressure(U[i], vel, fc_normed);
                 double gam3d = 1 / (2 - gam_0);
-                double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+               
                 double g_eff = GM - vel.norm() * vel.norm();
                 double rho = gam3d / (2 * gam3d - 1) * g_eff * U[i][0] * U[i][0] / press;
-                double d1,d2,d3,d4;
+               
+                double theta_acc = std::acos(fc_normed[1] * std::sin(tilt_angle) + fc_normed[2] * std::cos(tilt_angle));
+                
+
+                if (accretion_on)
+                {
+                    d0 =  1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
+                    std::exp(-(theta_acc - mu) * (theta_acc - mu) / (2 * sigma * sigma));
+
+                    omxr = cross_product(omega_acc, fc_normed);
+                    rxv = cross_product(fc_normed, omxr);
+
+                    d1 = d0 * rxv[0];
+                    d2 = d0 * rxv[1];
+                    d3 = d0 * rxv[2];
+            
+                    d4 = d0 * (e_acc + ((omxr - vel).norm() * (omxr - vel).norm()) / 2.);
+
+
+                    if (dt_new > 0.1 * U[i][0] / d0 && !std::isnan(U[i][0] / d0) && !std::isinf(U[i][0] / d0) && abs(U[i][0]/d0) < 1e20)
+                        dt_new = 0.1 * U[i][0] / d0;
+
+                    if (dt_new > abs(0.1 * U[i][1] / d1) && !std::isnan(U[i][1] / d1) && !std::isinf(U[i][1] / d1) && abs(U[i][1]/d1) < 1e20)
+                        dt_new = abs(0.1 * U[i][1] / d1);
+
+                    if (dt_new > abs(0.1 * U[i][2]) / d2 && !std::isnan(U[i][2] / d2) && !std::isinf(U[i][2] / d2) && abs(U[i][2]/d2) < 1e20)
+                        dt_new = abs(0.1 * U[i][2] / d2);
+
+                    if (dt_new > abs(0.1 * U[i][3]) / d3 && !std::isnan(U[i][3] / d3) && !std::isinf(U[i][3] / d3) && abs(U[i][3]/d3) < 1e20)
+                        dt_new = abs(0.1 * U[i][3] / d3);
+
+                    if (dt_new > 0.1 * U[i][4] / d4 && !std::isnan(U[i][4] / d4) && !std::isinf(U[i][4] / d4) && abs(U[i][4]/d4) < 1e20)
+                        dt_new = 0.1 * U[i][4] / d4;
+
+                   
+                    
+
+                }
+
+                
 
                 // if (dt_new > 0.01 * U[i][0] / (alpha * rho * (vel - vel0).norm()))
                 //     dt_new = 0.01 * U[i][0] / (alpha * rho * (vel - vel0).norm());
-
-
-                d1 = alpha * rho * (vel - vel0).norm() / U[i][0] *U[i][1];
+                if (friction_on)
+                {
+                d1 = alpha * rho * (vel - vel0).norm() / U[i][0] * U[i][1];
                 d2 = alpha * rho * (vel - vel0).norm() / U[i][0] * U[i][2];
                 d3 = alpha * rho * (vel - vel0).norm() / U[i][0] * U[i][3];
-                d4 =alpha * U[i][0] * omega_acc_abs * 
-                (vel.norm() * vel.norm() / 2. + U[i][4] * gam_0 / ((gam_0 - 1) * U[i][0]));
+                d4 = alpha * U[i][0] * omega_acc_abs *
+                     (vel.norm() * vel.norm() / 2. + press * gam_0 / ((gam_0 - 1) * U[i][0]));
 
-                if (dt_new > 0.1 * 1 / (alpha * omega_acc_abs))
-                dt_new = 0.1 *1 /(alpha * omega_acc_abs) ;
+                if (dt_new > 0.1 * 1 / (alpha * omega_acc_abs) && !std::isnan(0.1 * 1 / (alpha * omega_acc_abs)) && !std::isinf(0.1 * 1 / (alpha * omega_acc_abs)))
+                    dt_new = 0.1 * 1 / (alpha * omega_acc_abs);
 
-                if(dt_new > 0.1 * U[i][1]/d1)
-                dt_new = 0.1 * U[i][1]/d1;
+                if (dt_new > (abs( 0.1 * U[i][1]) / d1) && !std::isnan(U[i][1] / d1) && !std::isinf(U[i][1] / d1)&& abs(U[i][1]/d1) < 1e20)
+                    dt_new = abs(0.1 * U[i][1] / d1);
 
-                if(dt_new > 0.1 * U[i][2]/d2)
-                dt_new = 0.1 * U[i][2]/d2;
+                if (dt_new > (abs(0.1 * U[i][2]) / d2) && !std::isnan(U[i][2] / d2) && !std::isinf(U[i][2] / d2)&& abs(U[i][2]/d2) < 1e20)
+                    dt_new = abs(0.1 * U[i][2] / d2);
 
-                if(dt_new > 0.1 * U[i][3]/d3)
-                dt_new = 0.1 * U[i][3]/d3;
+                if (dt_new > (abs(0.1 * U[i][3]) / d3) && !std::isnan(U[i][3] / d3) && !std::isinf(U[i][3] / d3)&& abs(U[i][3]/d3) < 1e20)
+                    dt_new = abs(0.1 * U[i][3] / d3);
 
-                if(dt_new > 0.1 * U[i][4]/d4)
-                dt_new = 0.1 * U[i][4]/d4;
-
+                if (dt_new > (0.1 * U[i][4] / d4) && !std::isnan(U[i][4] / d4) && !std::isinf(U[i][4] / d4)&& abs(U[i][4]/d4) < 1e20)
+                    dt_new = 0.1 * U[i][4] / d4;
+                    
+                    
+                }
             
-            }
         }
+
 
         if (dt_new < 0)
         {
+            std::cout<<"error: dt < 0: "<<dt_new<<"\n";
             stop_check = true;
             dt_new = 1e20;
         }
-        
+
         return dt_new;
     }
 
@@ -748,8 +788,6 @@ protected:
         double pressure_floor = 1e-16;
         double gam_0 = make_gam(u, r);
 
-
-        
         // return  (u[4] - u[0] * vel.norm() * vel.norm() / 2) * (gam - 1); //v1 = uncompressed
         // return (u[4] - u[0] * vel.norm() * vel.norm() / 2) * (gam - 1) / gam; // v2 = different P
         // return (u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1) / gam; // v3 = compressed star + sin
@@ -795,25 +833,21 @@ protected:
 
         p_L = pressure(u_L, vel_l, edge_center_l);
         p_R = pressure(u_R, vel_r, edge_center_r);
-        
-        double gam_L=gam;
-        double gam_R=gam;
-        
-        
+
+        double gam_L = gam;
+        double gam_R = gam;
 
         double z = (gam - 1) / (2 * gam);
 
-        if(var_gamma){
-            gam_L=make_gam(u_L,edge_center_l);
-            gam_R=make_gam(u_R,edge_center_r);
-            z=((gam_L+gam_R)/2. - 1) / (2 * (gam_L+gam_R)/2.);
+        if (var_gamma)
+        {
+            gam_L = make_gam(u_L, edge_center_l);
+            gam_R = make_gam(u_R, edge_center_r);
+            z = ((gam_L + gam_R) / 2. - 1) / (2 * (gam_L + gam_R) / 2.);
         }
-
 
         a_L = std::sqrt(gam_L * p_L / u_L[0]);
         a_R = std::sqrt(gam_R * p_R / u_R[0]);
-
-        
 
         // double p_star=std::pow((a_L+a_R-(gam-1)/2. * (dot_product(edge_normals[n_face][n_edge], vel_r)-dot_product(edge_normals[n_face][n_edge], vel_l)))
         //  /( a_L/std::pow(p_L,z) + a_R/std::pow(p_R,z) ),1./z);
@@ -827,7 +861,7 @@ protected:
         }
         else
         {
-            q_R = std::sqrt(1 + ((gam_L+gam_R)/2. + 1) / (2 * (gam_L+gam_R)/2.) * (p_star / p_R - 1));
+            q_R = std::sqrt(1 + ((gam_L + gam_R) / 2. + 1) / (2 * (gam_L + gam_R) / 2.) * (p_star / p_R - 1));
             if (std::isnan(q_R) || std::isinf(q_R))
                 q_R = 1;
         }
@@ -838,7 +872,7 @@ protected:
         }
         else
         {
-            q_L = std::sqrt(1 + ((gam_L+gam_R)/2. + 1) / (2 * (gam_L+gam_R)/2.) * (p_star / p_L - 1));
+            q_L = std::sqrt(1 + ((gam_L + gam_R) / 2. + 1) / (2 * (gam_L + gam_R) / 2.) * (p_star / p_L - 1));
             if (std::isnan(q_L) || std::isinf(q_L))
                 q_L = 1;
         }
@@ -932,7 +966,7 @@ protected:
         // double p = pressure(U[n_face], vel, edge_center);
         double p = U[n_face][4] + p_an[n_face];
 
-        double gam_0=make_gam(u_r, edge_center);
+        double gam_0 = make_gam(u_r, edge_center);
 
         c = std::sqrt(gam_0 * p / (U[n_face][0] + rho_an[n_face]));
         // c = std::sqrt(gam * p / U[n_face][0]);
@@ -986,7 +1020,7 @@ protected:
         double p = U[n_face][4] + p_an[n_face];
 
         // c = std::sqrt(gam * p / U[n_face][0]);
-        double gam_0=make_gam(u_r, edge_center);
+        double gam_0 = make_gam(u_r, edge_center);
         c = std::sqrt(gam_0 * p / (U[n_face][0] + rho_an[n_face]));
 
         nu_plus = (c + dot_product(vel, edge_normals[n_face][n_edge])) * dt *
