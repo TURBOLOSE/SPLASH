@@ -517,14 +517,14 @@ protected:
 
             if (!friction_on)
             {
-                double dmdt = -(fall_eff * acc_rate * 4 * M_PI) / total_mass * u[0]; // time constant in T_unit^{-1} times surf density
+                double dmdt = (fall_eff * acc_rate * 4 * M_PI) / total_mass * u[0]; // time constant in T_unit^{-1} times surf density
                 // double dmdt=-(fall_eff*acc_rate*area_coeff*4*M_PI)/total_mass * u[0]; //time constant in T_unit^{-1} times surf density
-                res[0] += dmdt;
-                res[1] += dmdt * rxv[0];
-                res[2] += dmdt * rxv[1];
-                res[3] += dmdt * rxv[2];
-                res[4] += dmdt * (gam_0 / (gam_0 - 1) * u[4] / u[0] + (vel.norm() * vel.norm()) / 2.);
-                total_mass_gain += dmdt * surface_area[n_face];
+                res[0] -= dmdt;
+                res[1] -= dmdt * rxv[0];
+                res[2] -= dmdt * rxv[1];
+                res[3] -= dmdt * rxv[2];
+                res[4] -= dmdt * (gam_0 / (gam_0 - 1) * u[4] / u[0] + (vel.norm() * vel.norm()) / 2.);
+                total_mass_gain -= dmdt * surface_area[n_face];
             }
 
             // energy sink term (radiation energy diffusion)
@@ -543,7 +543,7 @@ protected:
         {
             // IS99 friction
             double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
-            double g_eff = GM - vel.norm() * vel.norm();
+            double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
             double gam3d = 1 / (2 - gam_0);
             double rho = gam3d / (2 * gam3d - 1) * g_eff * u[0] * u[0] / u[4];
 
@@ -561,15 +561,28 @@ protected:
             // res[3] += l_fr[2];
             // res[4] += dot_product(wr, vel0);
 
-            // res[0] -= alpha * rho * (vel - vel0).norm(); //old versin
-            res[0] -= alpha * u[0] * omega_acc_abs;
-            res[1] -= alpha * rho * (vel - vel0).norm() / u[0] * u[1];
+            // res[0] -= alpha * rho * (vel - vel0).norm(); //old version
+            //res[0] -= alpha * u[0] * omega_acc_abs;
+
+            res[1] -= alpha * rho * (vel - vel0).norm() / u[0] * u[1]; //friction
             res[2] -= alpha * rho * (vel - vel0).norm() / u[0] * u[2];
             res[3] -= alpha * rho * (vel - vel0).norm() / u[0] * u[3];
-            res[4] -= alpha * u[0] * omega_acc_abs * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
+            res[4] -= alpha * rho * (vel - vel0).norm()*(dot_product(vel,vel0)-dot_product(vel0,vel0));
+
+            //res[4] -= alpha * u[0] * omega_acc_abs * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
             // res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
 
             total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
+
+
+            double dmdt= alpha * u[0] * omega_acc_abs; //fall terms
+            res[0] -= dmdt;
+            res[1] -= dmdt * rxv[0];
+            res[2] -= dmdt * rxv[1];
+            res[3] -= dmdt * rxv[2];
+            res[4] -= dmdt * (gam_0 / (gam_0 - 1) * u[4] / u[0] + (vel.norm() * vel.norm()) / 2.);
+
+            
 
             // discontinious friction
             //  double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
@@ -716,20 +729,27 @@ protected:
                     d4 = d0 * (e_acc + ((omxr - vel).norm() * (omxr - vel).norm()) / 2.);
 
 
-                    if (dt_new > 0.1 * U[i][0] / d0 && !std::isnan(U[i][0] / d0) && !std::isinf(U[i][0] / d0) && abs(U[i][0]/d0) < 1e20)
-                        dt_new = 0.1 * U[i][0] / d0;
+                    if (dt_new > 0.3 * U[i][0] / d0 && !std::isnan(U[i][0] / d0) && !std::isinf(U[i][0] / d0) && abs(U[i][0]/d0) < dt)
+                        dt_new = 0.3 * U[i][0] / d0;
 
-                    if (dt_new > abs(0.1 * U[i][1] / d1) && !std::isnan(U[i][1] / d1) && !std::isinf(U[i][1] / d1) && abs(U[i][1]/d1) < 1e20)
-                        dt_new = abs(0.1 * U[i][1] / d1);
+                   /* if (dt_new > abs(0.3 * U[i][1] / d1) && !std::isnan(U[i][1] / d1) && !std::isinf(U[i][1] / d1) && abs(U[i][1]/d1) < dt)
+                        dt_new = abs(0.3 * U[i][1] / d1);
 
-                    if (dt_new > abs(0.1 * U[i][2]) / d2 && !std::isnan(U[i][2] / d2) && !std::isinf(U[i][2] / d2) && abs(U[i][2]/d2) < 1e20)
-                        dt_new = abs(0.1 * U[i][2] / d2);
+                    if (dt_new > abs(0.3 * U[i][2]) / d2 && !std::isnan(U[i][2] / d2) && !std::isinf(U[i][2] / d2) && abs(U[i][2]/d2) < dt)
+                        dt_new = abs(0.3 * U[i][2] / d2);
 
-                    if (dt_new > abs(0.1 * U[i][3]) / d3 && !std::isnan(U[i][3] / d3) && !std::isinf(U[i][3] / d3) && abs(U[i][3]/d3) < 1e20)
-                        dt_new = abs(0.1 * U[i][3] / d3);
+                    if (dt_new > abs(0.3 * U[i][3]) / d3 && !std::isnan(U[i][3] / d3) && !std::isinf(U[i][3] / d3) && abs(U[i][3]/d3) < dt)
+                        dt_new = abs(0.3 * U[i][3] / d3);*/
 
-                    if (dt_new > 0.1 * U[i][4] / d4 && !std::isnan(U[i][4] / d4) && !std::isinf(U[i][4] / d4) && abs(U[i][4]/d4) < 1e20)
-                        dt_new = 0.1 * U[i][4] / d4;
+                    
+                double l_abs=std::sqrt(U[i][1]*U[i][1]+U[i][2]*U[i][2]+U[i][3]*U[i][3]),
+                dl_abs=std::sqrt(d1*d1+d2*d2+d3*d3);
+
+                if (dt_new > (0.3 * l_abs / dl_abs) && !std::isnan(0.3 * l_abs / dl_abs) && !std::isinf(0.3 * l_abs / dl_abs)&& abs(0.3 * l_abs / dl_abs) < dt)
+                    dt_new = 0.3 * l_abs / dl_abs;
+
+                    if (dt_new > 0.3 * U[i][4] / d4 && !std::isnan(U[i][4] / d4) && !std::isinf(U[i][4] / d4) && abs(U[i][4]/d4) < dt)
+                        dt_new = 0.3 * U[i][4] / d4;
 
                    
                     
@@ -748,26 +768,34 @@ protected:
                 d4 = alpha * U[i][0] * omega_acc_abs *
                      (vel.norm() * vel.norm() / 2. + press * gam_0 / ((gam_0 - 1) * U[i][0]));
 
-                if (dt_new > 0.1 * 1 / (alpha * omega_acc_abs) && !std::isnan(0.1 * 1 / (alpha * omega_acc_abs)) && !std::isinf(0.1 * 1 / (alpha * omega_acc_abs)))
-                    dt_new = 0.1 * 1 / (alpha * omega_acc_abs);
+                if (dt_new > 0.3 * 1 / (alpha * omega_acc_abs) && !std::isnan(0.3 * 1 / (alpha * omega_acc_abs))
+                 && !std::isinf(0.3 * 1 / (alpha * omega_acc_abs))&& abs(0.3 * 1 / (alpha * omega_acc_abs)) < dt )
+                    dt_new = 0.3 * 1 / (alpha * omega_acc_abs);
 
-                if (dt_new > (abs( 0.1 * U[i][1]) / d1) && !std::isnan(U[i][1] / d1) && !std::isinf(U[i][1] / d1)&& abs(U[i][1]/d1) < 1e20)
-                    dt_new = abs(0.1 * U[i][1] / d1);
+               /* if (dt_new > (abs( 0.3 * U[i][1]) / d1) && !std::isnan(U[i][1] / d1) && !std::isinf(U[i][1] / d1)&& abs(U[i][1]/d1) < dt)
+                    dt_new = abs(0.3 * U[i][1] / d1);
 
-                if (dt_new > (abs(0.1 * U[i][2]) / d2) && !std::isnan(U[i][2] / d2) && !std::isinf(U[i][2] / d2)&& abs(U[i][2]/d2) < 1e20)
-                    dt_new = abs(0.1 * U[i][2] / d2);
+                if (dt_new > (abs(0.3 * U[i][2]) / d2) && !std::isnan(U[i][2] / d2) && !std::isinf(U[i][2] / d2)&& abs(U[i][2]/d2) < dt)
+                    dt_new = abs(0.3 * U[i][2] / d2);
 
-                if (dt_new > (abs(0.1 * U[i][3]) / d3) && !std::isnan(U[i][3] / d3) && !std::isinf(U[i][3] / d3)&& abs(U[i][3]/d3) < 1e20)
-                    dt_new = abs(0.1 * U[i][3] / d3);
+                if (dt_new > (abs(0.3 * U[i][3]) / d3) && !std::isnan(U[i][3] / d3) && !std::isinf(U[i][3] / d3)&& abs(U[i][3]/d3) < dt)
+                    dt_new = abs(0.3 * U[i][3] / d3);*/
 
-                if (dt_new > (0.1 * U[i][4] / d4) && !std::isnan(U[i][4] / d4) && !std::isinf(U[i][4] / d4)&& abs(U[i][4]/d4) < 1e20)
-                    dt_new = 0.1 * U[i][4] / d4;
+                double l_abs=std::sqrt(U[i][1]*U[i][1]+U[i][2]*U[i][2]+U[i][3]*U[i][3]),
+                       dl_abs=std::sqrt(d1*d1+d2*d2+d3*d3);
+
+                if (dt_new > (0.3 * l_abs / dl_abs) && !std::isnan(0.3 * l_abs / dl_abs) && !std::isinf(0.3 * l_abs / dl_abs)&& abs(0.3 * l_abs / dl_abs) < dt)
+                    dt_new = 0.3 * l_abs / dl_abs;
+
+                if (dt_new > (0.3 * U[i][4] / d4) && !std::isnan(U[i][4] / d4) && !std::isinf(U[i][4] / d4)&& abs(U[i][4]/d4) < dt)
+                    dt_new = 0.3 * U[i][4] / d4;
                     
                     
                 }
             
         }
-
+        
+        //std::cout<<dt_new<<std::endl;
 
         if (dt_new < 0)
         {

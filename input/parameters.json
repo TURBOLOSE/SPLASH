@@ -14,7 +14,7 @@
     "omega_acc_abs":0.4,
     "tilt_angle":0.1,
     "acc_width":0.1,
-    "friction_on":false,
+    "friction_on":true,
     "alpha":1e-3,
     "var_gamma":true
 }

@@ -12,7 +12,7 @@ from scipy.interpolate import griddata
 
 def projection_plots(value, print_residuals:bool=False, print_log:bool=False, add_streamplot:bool=False): 
     #value = rho,p,omega
-    skipstep=1
+    skipstep=10
     
     gam=1.25
     skipf=0
@@ -263,7 +263,7 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
 
 
 
-projection_plots("p", print_residuals=True, print_log=False, add_streamplot=False)
+projection_plots("rho", print_residuals=False, print_log=False, add_streamplot=False)
 #projection_plots('vel_abs', print_residuals=False, print_log=False, add_streamplot=False)
 
 
