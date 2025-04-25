@@ -690,6 +690,8 @@ protected:
             double sigma = acc_width / 2.355; // FWHM formula
 
             double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+            double kappa = 3.4e6; // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
+
 
             for (size_t i = 0; i < this->n_faces(); i++)
             {
@@ -699,6 +701,8 @@ protected:
                 l_vec[1] = U[i][2];
                 l_vec[2] = U[i][3];
                 double gam_0 = make_gam(U[i], fc_normed);
+                double beta = make_beta(U[i], fc_normed);
+        
 
                 vel = cross_product(fc_normed, l_vec);
                 vel /= (-U[i][0]);
@@ -713,6 +717,7 @@ protected:
                
                 double theta_acc = std::acos(fc_normed[1] * std::sin(tilt_angle) + fc_normed[2] * std::cos(tilt_angle));
                 
+               
 
                 if (accretion_on)
                 {
@@ -751,8 +756,11 @@ protected:
                     if (dt_new > 0.3 * U[i][4] / d4 && !std::isnan(U[i][4] / d4) && !std::isinf(U[i][4] / d4) && abs(U[i][4]/d4) < dt)
                         dt_new = 0.3 * U[i][4] / d4;
 
+                   double d5 = g_eff / kappa * (1 - beta);
+                
                    
-                    
+                   if (dt_new > 0.3 * U[i][4] / d5 && !std::isnan(U[i][4] / d5) && !std::isinf(U[i][4] / d5) && abs(U[i][4]/d5) < dt)
+                        dt_new = 0.3 * U[i][4] / d5;
 
                 }
 
