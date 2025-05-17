@@ -12,7 +12,7 @@ from scipy.interpolate import griddata
 
 def projection_plots(value, print_residuals:bool=False, print_log:bool=False, add_streamplot:bool=False): 
     #value = rho,p,omega
-    skipstep=10
+    skipstep=1
     
     gam=1.25
     skipf=0
@@ -49,6 +49,13 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
         label_pr='Speed of sound'
         data_rho.loc[:,1:]=data_p.loc[:,1:]/data_rho.loc[:,1:]
         data_rho.loc[:,1:]=np.sqrt(1.25*data_rho.loc[:,1:])
+    elif(value=='entropy' or 'entr'):
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
+        label_pr='Entropy'
+        data_rho.loc[:,1:]=data_p.loc[:,1:]/(data_rho.loc[:,1:]**  ( (10-3*data_beta.loc[:,1:])/(8-3*data_beta.loc[:,1:]) )   )
+
     elif(value=='vel_abs'):
         label_pr='Speed'
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
@@ -222,8 +229,6 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
 
     #data_rho.loc[:,1:]*=2
 
-    #min_rho=1
-    #max_rho=50
 
     norm = mpl.colors.Normalize(vmin=min_rho, vmax=max_rho)
     mpl.rcParams.update({'font.size': 25})
@@ -256,21 +261,20 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
 
 
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colorm),cax=ax[1], orientation='horizontal', label=label_pr)
-            fig.savefig('plots/fig'+"{0:0>4}".format(i)+'.png', bbox_inches='tight',dpi=300)
+            fig.savefig('plots/fig'+"{0:0>4}".format(i)+'.png', bbox_inches='tight',dpi=200)
             plt.clf()
             plt.close()
     
 
 
 
-projection_plots("rho", print_residuals=False, print_log=False, add_streamplot=False)
+projection_plots("omega", print_residuals=False, print_log=False, add_streamplot=False)
 #projection_plots('vel_abs', print_residuals=False, print_log=False, add_streamplot=False)
 
 
 
 def integrated_plot(value): 
     #value = rho,p
-
 
     path='results/'
 

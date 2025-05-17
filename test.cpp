@@ -9,9 +9,9 @@ using namespace pmp;
 int main()
 {
     // SurfaceMesh mesh = uv_sphere(50,50);
-    SurfaceMesh mesh = quad_sphere(6);
+    //SurfaceMesh mesh = quad_sphere(6);
     // SurfaceMesh mesh = icosphere(5);
-    //SurfaceMesh mesh = icosphere_hex(5);
+    SurfaceMesh mesh = icosphere_hex(5);
 
     // MUSCL_base_geometry test(mesh);
 
@@ -33,6 +33,9 @@ int main()
 
     std::ifstream inData("input/input.dat");
     // std::ifstream inData("results/final_state.dat");
+
+    std::ofstream out_deltaE("results/deltaE.dat");
+
 
     std::ofstream out_lc_0("results/lightcurve0.dat");
     std::ofstream out_lc_45("results/lightcurve45.dat");
@@ -93,7 +96,7 @@ int main()
     test2.write_t_L();
     test2.write_t_mach();
 
-    std::vector<double> lightcurves;
+    std::vector<double> lightcurves, en_changes;
 
     lightcurves = test2.get_light_curves();
     out_lc_0 << test2.time() << " " << lightcurves[0] << "\n";
@@ -104,6 +107,15 @@ int main()
     out_lc_90.flush();
     out_lc_180 << test2.time() << " " << lightcurves[3] << "\n";
     out_lc_180.flush();
+
+
+    out_deltaE<< "t, en_gain_acc, en_loss_fall, en_loss_fric, en_loss_rad \n";
+
+    en_changes=test2.get_energy_changes();
+    out_deltaE<<test2.time() << " "<<en_changes[0]<< " "<<en_changes[1]
+    << " "<<en_changes[2]<< " "<<en_changes[3]<<"\n";
+    out_deltaE.flush();
+    
 
     // test2.write_t_tracer();
 
@@ -122,6 +134,13 @@ int main()
         out_lc_90.flush();
         out_lc_180 << test2.time() << " " << lightcurves[3] << "\n";
         out_lc_180.flush();
+
+
+        en_changes=test2.get_energy_changes();
+        out_deltaE<<test2.time() << " "<<en_changes[0]<< " "<<en_changes[1]
+        << " "<<en_changes[2]<< " "<<en_changes[3]<<"\n";
+        out_deltaE.flush();
+
 
         if (steps % skipstep == 0)
         {

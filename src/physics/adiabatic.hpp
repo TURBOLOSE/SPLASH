@@ -14,12 +14,16 @@ protected:
     std::ofstream outfile_l[3];
     bool accretion_on, friction_on;
     double total_mass, acc_rate, e_acc, omega_acc_abs, tilt_angle, acc_width, area_coeff, alpha;
+    double en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o;
+
 
 public:
     adiabatic(SurfaceMesh mesh, std::vector<std::vector<double>> U_in,
               int dim, double gam, double omega_ns_i, bool accretion_on_i, size_t threads)
         : MUSCL_base(mesh, U_in, dim, gam, omega_ns_i, threads), accretion_on(accretion_on_i)
     {
+
+        en_gain_acc_o=0; en_loss_fall_o=0; en_loss_fric_o=0; en_loss_rad_o=0;
 
         omega_ns = omega_ns_i;
 
@@ -132,6 +136,8 @@ public:
         }
         outfile_beta << "\n";
     };
+
+
 
     void write_t_p()
     {
@@ -345,6 +351,11 @@ public:
         return result;
     };
 
+    std::vector<double> get_energy_changes(){
+        
+    return {en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o,};
+    };
+
     void write_final_state()
     {
         std::ofstream out_final;
@@ -411,6 +422,8 @@ protected:
       // due to the weird reconstruction algorithm, u[4] here is the pressure \Pi
       // source should still return vector where res[4]=dE/dt
 
+
+        static double en_gain_acc, en_loss_fall, en_loss_fric, en_loss_rad;
         static double total_mass_gain = 0, total_mass_gain_old = 0;
         static double total_mass_loss = 0;
         std::vector<double> res;
@@ -508,6 +521,8 @@ protected:
 
             total_mass_gain += res[0] * surface_area[n_face];
 
+            en_gain_acc+= dt/2.*res[0] * (e_acc + ((omxr - vel).norm() * (omxr - vel).norm()) / 2.) * surface_area[n_face];
+            en_gain_acc_o=en_gain_acc;
             // sink term for mass into crust (+ energy and angular momentum)
             double fall_eff = 1; // how much of accreted material is gonna fall
 
@@ -536,6 +551,9 @@ protected:
             double kappa = 3.4e6; // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
 
             res[4] -= g_eff / kappa * (1 - beta);
+
+            en_loss_rad += dt/2.*g_eff / kappa * (1 - beta)* surface_area[n_face];
+            en_loss_rad_o= en_loss_rad;
         }
 
         // friction and depletion
@@ -556,25 +574,23 @@ protected:
             wr *= -alpha * rho * (vel - vel0).norm();
             l_fr = cross_product(fc_normed, wr);
 
-            // res[1] += l_fr[0];
-            // res[2] += l_fr[1];
-            // res[3] += l_fr[2];
-            // res[4] += dot_product(wr, vel0);
-
-            // res[0] -= alpha * rho * (vel - vel0).norm(); //old version
-            //res[0] -= alpha * u[0] * omega_acc_abs;
-
-            res[1] -= alpha * rho * (vel - vel0).norm() / u[0] * u[1]; //friction
-            res[2] -= alpha * rho * (vel - vel0).norm() / u[0] * u[2];
-            res[3] -= alpha * rho * (vel - vel0).norm() / u[0] * u[3];
+            res[1] += l_fr[0];
+            res[2] += l_fr[1];
+            res[3] += l_fr[2];
             res[4] -= alpha * rho * (vel - vel0).norm()*(dot_product(vel,vel0)-dot_product(vel0,vel0));
 
+            // vel.print();
+            // vel0.print();
+            // std::cout<<"\n";
+
+            //std::cout<<(vel - vel0).norm()<<"\n";
+
+            en_loss_fric+=dt/2.*alpha * rho * (vel - vel0).norm()*(dot_product(vel,vel0)-dot_product(vel0,vel0)) * surface_area[n_face];
+            en_loss_fric_o= en_loss_fric;
             //res[4] -= alpha * u[0] * omega_acc_abs * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
             // res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
 
             total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
-
-
             double dmdt= alpha * u[0] * omega_acc_abs; //fall terms
             res[0] -= dmdt;
             res[1] -= dmdt * rxv[0];
@@ -582,8 +598,12 @@ protected:
             res[3] -= dmdt * rxv[2];
             res[4] -= dmdt * (gam_0 / (gam_0 - 1) * u[4] / u[0] + (vel.norm() * vel.norm()) / 2.);
 
+            en_loss_fall+=dt/2.* dmdt * (gam_0 / (gam_0 - 1) * u[4] / u[0] + (vel.norm() * vel.norm()) / 2.) * surface_area[n_face];
             
 
+
+
+            en_loss_fall_o=en_loss_fall;
             // discontinious friction
             //  double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
             //  double g_eff = GM - vel.norm() * vel.norm();
