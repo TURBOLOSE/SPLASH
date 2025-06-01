@@ -10,9 +10,10 @@ from tqdm import tqdm
 from scipy.interpolate import griddata
 
 
-def projection_plots(value, print_residuals:bool=False, print_log:bool=False, add_streamplot:bool=False): 
+def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, print_residuals:bool=False, 
+                     log:bool=False, add_streamplot:bool=False, deltaplot:bool=False): 
     #value = rho,p,omega
-    skipstep=1
+    skipstep=100
     
     gam=1.25
     skipf=0
@@ -21,7 +22,7 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
     #path='plots/article_sim_mk2/'
     #path='plots/big_quad_next/'
     #path='plots/new split test/2 layers/'
-    #path='plots/shock_test/'
+    #path='plots/spinup/'
 
     if(value=='rho'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
@@ -81,13 +82,23 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
 
     if(print_residuals):
         for i in range(1,maxstep):
-            data_rho.loc[i,:]-=data_rho.loc[0,:]
+            data_rho.loc[i,1:]-=data_rho.loc[0,1:]
             data_rho.loc[i,1:]/=data_rho.loc[0,1:]
         data_rho.loc[0,:]-=data_rho.loc[0,:]
         label_pr+=" residuals"
 
-    if(print_log):
+    if(deltaplot):
+        for i in range(1,maxstep):
+            data_rho.loc[i,1:]-=data_rho.loc[i-1,1:]
+        #data_rho.loc[1:maxstep,1:]-=data_rho.loc[0:maxstep-1,1:]
+            #data_rho.loc[i,1:]/=data_rho.loc[0,1:]
+        data_rho.loc[0,1:]-=data_rho.loc[0,1:]
+        label_pr+=", delta"
+
+    if(log):
         data_rho.loc[:,1:]=np.log10(data_rho.loc[:,1:])
+
+    
 
 
     if(add_streamplot):
@@ -221,9 +232,16 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
     #=====================================================
     colorm = plt.get_cmap('viridis')
 
-    min_rho=np.min( data_rho.loc[:maxstep,1:len(x_plot)])
-    max_rho=np.max( data_rho.loc[:maxstep,1:len(x_plot)])
-    
+    if(min==0 and max==0):
+        min_rho=np.min( data_rho.loc[:maxstep,1:len(x_plot)])
+        max_rho=np.max( data_rho.loc[:maxstep,1:len(x_plot)])
+    else:
+        min_rho=min
+        max_rho=max
+        
+        
+
+    #min_rho=0
     #min_rho=np.quantile(data_rho.loc[:maxstep,1:len(x_plot)],0.05)
     #max_rho=np.quantile(data_rho.loc[:maxstep,1:len(x_plot)],0.95)
 
@@ -268,7 +286,7 @@ def projection_plots(value, print_residuals:bool=False, print_log:bool=False, ad
 
 
 
-projection_plots("omega", print_residuals=False, print_log=False, add_streamplot=False)
+projection_plots("p", min=0, max=0, print_residuals=False, log=False, add_streamplot=False, deltaplot=True)
 #projection_plots('vel_abs', print_residuals=False, print_log=False, add_streamplot=False)
 
 
@@ -276,7 +294,8 @@ projection_plots("omega", print_residuals=False, print_log=False, add_streamplot
 def integrated_plot(value): 
     #value = rho,p
 
-    path='results/'
+    #path='results/'
+    path='plots/cooling/'
 
 
     if(value=='rho'):
@@ -343,7 +362,7 @@ def integrated_plot(value):
     plt.close()
 
 
-integrated_plot('rho')
+integrated_plot('p')
 
 
 

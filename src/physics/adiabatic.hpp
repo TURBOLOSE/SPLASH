@@ -590,7 +590,8 @@ protected:
             //res[4] -= alpha * u[0] * omega_acc_abs * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
             // res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
 
-            total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
+           // total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
+           total_mass_loss -= alpha * u[0] * omega_acc_abs * surface_area[n_face];
             double dmdt= alpha * u[0] * omega_acc_abs; //fall terms
             res[0] -= dmdt;
             res[1] -= dmdt * rxv[0];
@@ -619,6 +620,8 @@ protected:
             // res[3] -= l_fr[2];
             // res[4] -= 3 / 4. * (1 - beta) * g_eff * u[0] * (dot_product(vel, vel0) - vel0.norm());
         }
+
+
 
         return res;
     };
