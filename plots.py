@@ -10,14 +10,14 @@ from tqdm import tqdm
 from scipy.interpolate import griddata
 
 
-def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, print_residuals:bool=False, 
-                     log:bool=False, add_streamplot:bool=False, deltaplot:bool=False): 
+def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, skipstep:int=1, print_residuals:bool=False, 
+                     log:bool=False, add_streamplot:bool=False, deltaplot:bool=False, reldeltaplot:bool=False ): 
     #value = rho,p,omega
-    skipstep=100
+    
     
     gam=1.25
     skipf=0
-    path='results/'
+    #path='results/'
     #path='plots/article plots updated/'
     #path='plots/article_sim_mk2/'
     #path='plots/big_quad_next/'
@@ -50,7 +50,7 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, p
         label_pr='Speed of sound'
         data_rho.loc[:,1:]=data_p.loc[:,1:]/data_rho.loc[:,1:]
         data_rho.loc[:,1:]=np.sqrt(1.25*data_rho.loc[:,1:])
-    elif(value=='entropy' or 'entr'):
+    elif(value=='entropy'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
         data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
@@ -58,6 +58,7 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, p
         data_rho.loc[:,1:]=data_p.loc[:,1:]/(data_rho.loc[:,1:]**  ( (10-3*data_beta.loc[:,1:])/(8-3*data_beta.loc[:,1:]) )   )
 
     elif(value=='vel_abs'):
+        print("speed")
         label_pr='Speed'
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
@@ -87,16 +88,26 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, p
         data_rho.loc[0,:]-=data_rho.loc[0,:]
         label_pr+=" residuals"
 
-    if(deltaplot):
-        for i in range(1,maxstep):
-            data_rho.loc[i,1:]-=data_rho.loc[i-1,1:]
-        #data_rho.loc[1:maxstep,1:]-=data_rho.loc[0:maxstep-1,1:]
-            #data_rho.loc[i,1:]/=data_rho.loc[0,1:]
-        data_rho.loc[0,1:]-=data_rho.loc[0,1:]
-        label_pr+=", delta"
+    if(deltaplot and reldeltaplot):
+        print('Both deltaplot and reldeltaplot cannot be on at the same time')
+    else:
+        if(deltaplot):
+            for i in range(1,maxstep):
+                data_rho.loc[i,1:]-=data_rho.loc[i-1,1:]
+            #data_rho.loc[1:maxstep,1:]-=data_rho.loc[0:maxstep-1,1:]
+                #data_rho.loc[i,1:]/=data_rho.loc[0,1:]
+            data_rho.loc[0,1:]-=data_rho.loc[0,1:]
+            label_pr+=", delta"
+        if(reldeltaplot):
+            for i in range(1,maxstep):
+                data_rho.loc[i,1:]/=data_rho.loc[i-1,1:]
+            data_rho.loc[0,1:]/=data_rho.loc[0,1:]
+            label_pr+=", relative delta"
 
     if(log):
         data_rho.loc[:,1:]=np.log10(data_rho.loc[:,1:])
+        label_pr1=r'$log_{10}$ of '+label_pr
+        label_pr=label_pr1
 
     
 
@@ -264,6 +275,7 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, p
             #fig.tight_layout()
             plt.subplots_adjust(hspace=10)
             #rho=(np.array(data_rho.loc[i,1:len(faces)])-min_rho)/(max_rho-min_rho)
+            #fig.suptitle('t='+"{:.4f}".format(data_rho.loc[i,0]))
             fig.suptitle('t='+"{:.4f}".format(data_rho.loc[i,0]*3.3e-5)+' s')
             ax[0].set_xlabel(r'$\varphi / \sqrt{2}$', fontsize=25)
             ax[0].set_ylabel(r'$\sqrt{2}  \cos(\theta )$', fontsize=25)
@@ -286,7 +298,9 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, p
 
 
 
-projection_plots("p", min=0, max=0, print_residuals=False, log=False, add_streamplot=False, deltaplot=True)
+projection_plots("mach", path='results/', min=0, max=0,skipstep=2, print_residuals=False, 
+                 log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False)
+
 #projection_plots('vel_abs', print_residuals=False, print_log=False, add_streamplot=False)
 
 

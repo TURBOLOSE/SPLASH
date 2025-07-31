@@ -12,8 +12,8 @@ protected:
     std::vector<double> betas;
     std::ofstream outfile, outfile_p, outfile_omega, outfile_curl, outfile_beta, outfile_mach;
     std::ofstream outfile_l[3];
-    bool accretion_on, friction_on;
-    double total_mass, acc_rate, e_acc, omega_acc_abs, tilt_angle, acc_width, area_coeff, alpha;
+    bool accretion_on, friction_on, smooth_acc_on, extra_heat_on;
+    double total_mass, acc_rate, e_acc, omega_acc_abs, tilt_angle, acc_width, area_coeff, alpha, t_acc, extra_heat_power;
     double en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o;
 
 
@@ -24,6 +24,8 @@ public:
     {
 
         en_gain_acc_o=0; en_loss_fall_o=0; en_loss_fric_o=0; en_loss_rad_o=0;
+
+        set_min_values();
 
         omega_ns = omega_ns_i;
 
@@ -82,6 +84,11 @@ public:
         acc_width = parameters["acc_width"];
         alpha = parameters["alpha"];
         friction_on = parameters["friction_on"];
+        smooth_acc_on = parameters["smooth_acc_on"];
+        t_acc=parameters["t_acc"];
+        extra_heat_on = parameters["extra_heat_on"];
+        extra_heat_power=parameters["extra_heat_power"];    
+
 
         area_coeff = 0;
         double mu = M_PI / 2;
@@ -501,9 +508,25 @@ protected:
 
         if (accretion_on)
         {
+            
+            if(smooth_acc_on){
+                if(this->time()<t_acc){
+                    res[0] = adj_coeff * 1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
+                        std::exp(-(theta_acc - mu) * (theta_acc - mu) / (2 * sigma * sigma)) * (0.99/t_acc * t + 0.01);
+
+                }
+                else
+                {
+
+                    res[0] = adj_coeff * 1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
+                        std::exp(-(theta_acc - mu) * (theta_acc - mu) / (2 * sigma * sigma));
+                }
+            }
+            else{
 
             res[0] = adj_coeff * 1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
                      std::exp(-(theta_acc - mu) * (theta_acc - mu) / (2 * sigma * sigma));
+            }
 
             // normal distribution for smooth accretion
 
@@ -590,8 +613,8 @@ protected:
             //res[4] -= alpha * u[0] * omega_acc_abs * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
             // res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
 
-           // total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
-           total_mass_loss -= alpha * u[0] * omega_acc_abs * surface_area[n_face];
+            // total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
+            total_mass_loss -= alpha * u[0] * omega_acc_abs * surface_area[n_face];
             double dmdt= alpha * u[0] * omega_acc_abs; //fall terms
             res[0] -= dmdt;
             res[1] -= dmdt * rxv[0];
@@ -620,6 +643,9 @@ protected:
             // res[3] -= l_fr[2];
             // res[4] -= 3 / 4. * (1 - beta) * g_eff * u[0] * (dot_product(vel, vel0) - vel0.norm());
         }
+
+        if(extra_heat_on)
+            res[4]+=extra_heat_power;
 
 
 
@@ -844,7 +870,7 @@ protected:
         // double gam_0=gam;// older ver
 
         double theta = std::acos(r[2] / r.norm());
-        double pressure_floor = 1e-16;
+        //double pressure_floor = 1e-16;
         double gam_0 = make_gam(u, r);
 
         // return  (u[4] - u[0] * vel.norm() * vel.norm() / 2) * (gam - 1); //v1 = uncompressed

@@ -11,7 +11,7 @@ protected:
     std::vector<double> rho_an, p_an;
     std::vector<std::vector<std::vector<double>>> flux_var_plus, flux_var_minus, U_plus, U_minus;
     // flux_var^plus_ij flux_var^minus_ij, U_ij (short), U_ji(short)
-    double dt, gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, density_floor, CFL;
+    double dt, gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, density_floor, pressure_floor, CFL;
     int dim;
     bool var_gamma;
     size_t steps, threads;
@@ -42,6 +42,8 @@ public:
         std::fill(rho_an.begin(), rho_an.end(), 0);
         std::fill(p_an.begin(), p_an.end(), 0);
 
+
+        
         for (size_t i = 0; i < this->n_faces(); i++)
         {
 
@@ -59,6 +61,8 @@ public:
                 U_plus[i][j].resize(dim);
                 U_minus[i][j].resize(dim);
             }
+
+
         }
 
         std::ifstream ifs("input/parameters.json");
@@ -67,7 +71,8 @@ public:
         CFL = parameters["CFL"];
         var_gamma = parameters["var_gamma"];
 
-        density_floor = 1e-9;
+
+
         N = 1;
         h0 = 10;
         for (size_t n_face = 0; n_face < this->n_faces(); n_face++)
@@ -100,6 +105,27 @@ public:
 
         t = 0;
         steps = 0;
+       
+    };
+
+    void set_min_values(){
+
+        double min_p=1e100, min_rho=1e100,p;
+        
+        for (size_t i = 0; i < this->n_faces(); i++)
+        {
+            if(U[i][0]<min_rho)
+                min_rho=U[i][0];
+
+            p=pressure_fc(U[i], i);
+            if(p<min_p)
+                min_p=p;
+
+        }
+
+        density_floor=min_rho*1e-9;
+        pressure_floor=min_p*1e-9;
+
     };
 
     void do_step(double dt0)
@@ -522,7 +548,7 @@ private:
     double pressure_fc(std::vector<double> &u, int n_face) // u[4] == energy
     {                                                      // to do: make state_vector a class and turn this into a method
         vector3d<double> l_vec, vel, r;
-        double pressure_floor = 1e-16;
+        //double pressure_floor = 1e-16;
         l_vec[0] = u[1];
         l_vec[1] = u[2];
         l_vec[2] = u[3];

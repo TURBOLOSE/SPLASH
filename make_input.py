@@ -115,10 +115,10 @@ def make_input_5():
 
 
         if(np.abs(theta[face_num]-np.pi/2)<0.1):
-          p[face_num]=5
+          p[face_num]=1
         if r[face_num]<R0:
-           #p[face_num]=50
-           p[face_num]=350
+           p[face_num]=50
+           #p[face_num]=350
 
         
         # if(theta[face_num] >0):
@@ -174,8 +174,8 @@ def make_input_5_sp_layer():
 
     #============equal entropy initial version=======================================
     
-
-    rho_0=rho[0]/1e5
+    #rho_0=rho[0]/1e3
+    rho_0=rho[0]/6e3
     #rho_0=rho[0]/130
 
     #p_0=c_s**2*rho_0/gam
@@ -340,26 +340,30 @@ def make_input_5_sp_layer_exp():
 
 def make_input_5_sp_layer_diff_rot():
 
-    pa=2
-    gam0=4./3
+    pa=1
+   #gam0=4./3
+    gam0=5./3
+    #gam0=1.002
     gam=2-1/gam0
+
+    #V_conv=0.01
     V_conv=1
 
     face_centers=pd.read_table('results/face_centers.dat', header=None, delimiter=r"\s+")
 
     N=len(face_centers[0])
+    
     face_centers=np.array(face_centers)
+   
+
     rho=np.ones(N) #10^7 g/cm^2
+    #c_s=2*10**(-3)/V_conv 
     c_s=2*10**(-3)/V_conv 
     omega_ns=0
 
 
-    #tilt_angle=0
-    #turn_matrix=np.array([[1,0,0],[0,np.cos(tilt_angle), -np.sin(tilt_angle)],[0,np.sin(tilt_angle), np.cos(tilt_angle)]])
+    omega=np.array([0,0,0.01])/V_conv #c
 
-
-    #omega=turn_matrix.dot(np.array([0,0,0.05]))/V_conv #c
-    omega=np.array([0,0,0.05])
     omega_0=omega
     
     rho_0=rho[0]/130
@@ -499,10 +503,10 @@ def make_input_5_const_entr():
 #make_input_5()
 #make_input_5_const_entr()
 
-make_input_5_sp_layer()
+#make_input_5_sp_layer()
 
 #make_input_5_sp_layer_exp()
-#make_input_5_sp_layer_diff_rot()
+make_input_5_sp_layer_diff_rot()
 
 
 #make_input_4()
