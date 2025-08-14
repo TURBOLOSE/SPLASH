@@ -298,8 +298,8 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
 
 
-projection_plots("mach", path='results/', min=0, max=0,skipstep=2, print_residuals=False, 
-                 log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False)
+projection_plots("p", path='plots/res_heating/', min=0, max=0,skipstep=20, print_residuals=False, 
+                 log=True, add_streamplot=False, deltaplot=False, reldeltaplot=False)
 
 #projection_plots('vel_abs', print_residuals=False, print_log=False, add_streamplot=False)
 

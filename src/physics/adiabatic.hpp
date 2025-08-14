@@ -644,8 +644,16 @@ protected:
             // res[4] -= 3 / 4. * (1 - beta) * g_eff * u[0] * (dot_product(vel, vel0) - vel0.norm());
         }
 
-        if(extra_heat_on)
+        if(extra_heat_on){
+
+
             res[4]+=extra_heat_power;
+
+            if( vel.norm()/std::sqrt(gam_0*u[4]/u[0]) > 10)
+            res[4]+=4*extra_heat_power;
+
+            //crutch to avoid high mach
+        }
 
 
 
