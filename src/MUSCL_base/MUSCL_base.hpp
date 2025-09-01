@@ -255,6 +255,11 @@ public:
         return t;
     }
 
+    void set_time(double t_new)
+    {
+        t=t_new;
+    }
+
     bool get_stop_check()
     { // True = stop computations due to error
         return stop_check;

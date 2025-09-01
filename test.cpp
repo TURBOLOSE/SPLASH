@@ -31,7 +31,23 @@ int main()
 
     bool accretion_on = parameters["accretion_on"];
 
-    std::ifstream inData("input/input.dat");
+    //std::string input_f="input/input.dat";
+    std::string input_f="input/final_state(t=0.25).dat";
+    std::ifstream inData(input_f);
+
+    double t_0=0;
+
+    if(input_f.substr(6,11)=="final_state"){
+       std::string t_str=input_f;
+        t_str.erase(0,20);
+        t_str.erase(t_str.size()-5);
+
+        t_0 = stold( t_str);
+    }
+    
+
+
+
     // std::ifstream inData("results/final_state.dat");
 
     std::ofstream out_deltaE("results/deltaE.dat");
@@ -83,6 +99,8 @@ int main()
     // MUSCL_HLLE_p test2(mesh, U_in, dim, gam,omega_ns, threads);
     MUSCL_HLLC test2(mesh, U_in, dim, gam, omega_ns,accretion_on, threads);
     //MUSCL_HLLCplus test2(mesh, U_in, dim, gam, omega_ns, accretion_on, threads);
+
+    test2.set_time(t_0);
 
     test2.write_face_centers();
     test2.write_faces();

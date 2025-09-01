@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <cmath>
 #include <iomanip>
+#include <sstream>
+
 
 #define PMP_SCALAR_TYPE_64
 

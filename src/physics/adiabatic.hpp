@@ -366,7 +366,10 @@ public:
     void write_final_state()
     {
         std::ofstream out_final;
-        out_final.open("results/final_state.dat");
+        std::stringstream ss;
+        ss << "input/final_state(t=" << this->time() << ").dat";
+        std::string s = ss.str();
+        out_final.open(s);
 
         for (size_t n_face = 0; n_face < this->n_faces(); n_face++)
         {
@@ -648,9 +651,11 @@ protected:
 
 
             res[4]+=extra_heat_power;
+            
+            double local_mach=vel.norm()/std::sqrt(gam_0*u[4]/u[0]);
 
-            if( vel.norm()/std::sqrt(gam_0*u[4]/u[0]) > 10)
-            res[4]+=4*extra_heat_power;
+            if( local_mach > 3)
+            res[4]+=local_mach*extra_heat_power;
 
             //crutch to avoid high mach
         }
