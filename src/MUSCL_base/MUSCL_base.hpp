@@ -298,9 +298,11 @@ protected:
                         exit(1);
                     }
 
-                    // U[i][k] -= dt_here * (distance(vertices[faces[i][j]],vertices[faces[i][j1]]) / surface_area[i]) *(flux_var_minus[i][j][k]);
+                    U[i][k] -= dt_here * (distance(vertices[faces[i][j]],vertices[faces[i][j1]]) / surface_area[i]) *(flux_var_minus[i][j][k]); //todo:pre-compute distances maybe
                     // U[i][k] -= dt_here * (vertices[faces[i][j]]-vertices[faces[i][j1]]).norm() / surface_area[i] *(flux_var_minus[i][j][k]);
-                    U[i][k] -= round_diff * dt_here * (vertices[faces[i][j]] - vertices[faces[i][j1]]).norm() / surface_area[i] * (flux_var_minus[i][j][k]);
+
+                    //U[i][k] -= round_diff * dt_here * (vertices[faces[i][j]] - vertices[faces[i][j1]]).norm() / surface_area[i] * (flux_var_minus[i][j][k]);
+
                 }
             }
         }
@@ -408,7 +410,9 @@ private:
 
         for (size_t i = 0; i < this->n_faces(); i++) // tag1
         {
-            U[i][4] = pressure_fc(U[i], i);
+            U[i][4] = pressure_fc(U[i], i); 
+
+
             U[i][0] -= rho_an[i];
             U[i][4] -= p_an[i];
         }
@@ -456,7 +460,7 @@ private:
 
                         // std::cout<<pm[4]<<" "<<pp[4]<<"  "<<lim[4]<<"\n";
 
-                        U_plus[i][j][k] = E_fc(U_plus[i][j], i, j); // p -> E (tag1)
+                        U_plus[i][j][k] = E_edge(U_plus[i][j], i, j); // p -> E (tag1)
                         //std::cout<<U_plus[i][j][k]<<"\n";
                     }
                     else
@@ -570,31 +574,8 @@ private:
         vel = cross_product(r, l_vec);
         vel /= -u[0];
 
-        double gam_0 = make_gam(u, r);
-
-        // return (u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1) / gam; // v3 = compressed star + sin
-        return std::max(pressure_floor, (u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1)); // v4
-    }
-
-    double E_fc(std::vector<double> &u, int n_face, int n_edge) // u[4] == pressure
-    {                                                           // because we reconstruct pressure on edge we needed new formula for beta
-        vector3d<double> l_vec, vel, r;
-
-        l_vec[0] = u[1];
-        l_vec[1] = u[2];
-        l_vec[2] = u[3];
-
-        int n_edge_1 = n_edge + 1;
-        if (n_edge == faces[n_face].size() - 1)
-            n_edge_1 = 0;
-
-        r = (vertices[faces[n_face][n_edge]] + vertices[faces[n_face][n_edge_1]]);
-        r /= r.norm();
-        double theta = std::acos(r[2]);
-
-        vel = cross_product(r, l_vec);
-        vel /= (-u[0]);
-
+        //double gam_0 = make_gam(u, r);
+        
         double gam_0 = gam;
 
         if (var_gamma)
@@ -604,18 +585,18 @@ private:
             double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
             double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
             // new expression for C
-            double C = 12. / 5 * k_m * u[0] / (3 * u[4]) * pow(3. / 4 * c_sigma * g_eff * u[0], 1. / 4);
-            double beta_switch = 0.5479; // switch point for initial function
-            double C_switch = beta_switch / (1 - beta_switch);
+            double C = 12. / 5 * k_m * u[0] / (u[4] - u[0] * vel.norm() * vel.norm() / 2) * pow(3. / 4 * c_sigma * g_eff * u[0], 1. / 4);
+            double beta_switch = 0.736194670678821; // switch point for initial function
+            double C_switch = -1 - 1 / (beta_switch - 1);
             double beta;
 
             if (C <= C_switch)
             {
-                beta = C / (1 + C);
+                beta = 1 - 1 / (1 + C);
             }
             else
             {
-                beta = 1 - pow(1 / C, 4);
+                beta = 1 - pow(2 / C, 4);
             }
             
             double beta_ceil = 1 - 1e-9, beta_floor = 0;
@@ -623,8 +604,9 @@ private:
             if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
             beta = beta_ceil;
 
-            beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
-            beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
+            beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
+            beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
+
            //double gam3d = 1 / (2 - gam);
            // gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
             //gam_0 = 2 - 1 / gam_0; // 2d ver
@@ -637,7 +619,77 @@ private:
 
 
             gam_0=(10-3*beta)/(8-3*beta);
+        }
+
+        
+
+
+
+        // return (u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1) / gam; // v3 = compressed star + sin
+        return std::max(pressure_floor, (u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1)); // v4
+    }
+
+    double E_edge(std::vector<double> &u, int n_face, int n_edge) // u[4] == pressure
+    {  // because we reconstruct pressure on edge we needed new formula for beta
+        vector3d<double> l_vec, vel, r;
+
+        l_vec[0] = u[1];
+        l_vec[1] = u[2];
+        l_vec[2] = u[3];
+
+        int n_edge_1 = n_edge + 1;
+        if (n_edge == faces[n_face].size() - 1)
+            n_edge_1 = 0;
+
+        r = (vertices[faces[n_face][n_edge]] + vertices[faces[n_face][n_edge_1]]);
+        r /= r.norm();
+
+        vel = cross_product(r, l_vec);
+        vel /= (-u[0]);
+
+        double gam_0 = gam;
+
+
+
+
+        if (var_gamma)
+        {
+            double GM = 0.217909;
+            double g_eff = GM - vel.norm() * vel.norm();
+            double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
+            double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
+            // new expression for C
+            double C = 12. / 5 * k_m * u[0] / (u[4]) * pow(3. / 4 * c_sigma * g_eff * u[0], 1. / 4);
+            double beta_switch = 0.736194670678821; // switch point for initial function
+            double C_switch = -1 - 1 / (beta_switch - 1);
+            double beta;
+
+            if (C <= C_switch)
+            {
+                beta = 1 - 1 / (1 + C);
+            }
+            else
+            {
+                beta = 1 - pow(2 / C, 4);
+            }
             
+            double beta_ceil = 1 - 1e-9, beta_floor = 0;
+
+            if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
+            beta = beta_ceil;
+
+            beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
+            beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
+
+            if (beta < beta_floor ) // beta limitations
+            beta = beta_floor;
+
+             if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
+            beta = beta_ceil;
+
+
+
+            gam_0=(10-3*beta)/(8-3*beta);
         }
        
 
