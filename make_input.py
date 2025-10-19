@@ -500,10 +500,10 @@ def make_input_5_const_entr():
 
 
 #make_input_5_new_p()
-make_input_5()
+#make_input_5()
 #make_input_5_const_entr()
 
-#make_input_5_sp_layer()
+make_input_5_sp_layer()
 
 #make_input_5_sp_layer_exp()
 

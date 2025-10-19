@@ -7,13 +7,13 @@
 class MUSCL_base : public MUSCL_base_geometry
 {
 protected:
-    std::vector<std::vector<double>> U, U_temp, source_plus;
+    std::vector<std::vector<double>> U, U_temp, U_temp_1, source_plus;
     std::vector<double> rho_an, p_an;
     std::vector<std::vector<std::vector<double>>> flux_var_plus, flux_var_minus, U_plus, U_minus;
     // flux_var^plus_ij flux_var^minus_ij, U_ij (short), U_ji(short)
     double dt, gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, density_floor, pressure_floor, CFL;
-    int dim;
-    bool var_gamma;
+    int dim, implicit_iternum;
+    bool var_gamma, implicit_solve_on;
     size_t steps, threads;
     double omega_ns;
     bool stop_check = false;
@@ -35,6 +35,7 @@ public:
         U_plus.resize(this->n_faces());
         U_minus.resize(this->n_faces());
         U_temp.resize(this->n_faces());
+        U_temp_1.resize(this->n_faces());
         source_plus.resize(this->n_faces());
         rho_an.resize(this->n_faces());
         p_an.resize(this->n_faces());
@@ -42,8 +43,6 @@ public:
         std::fill(rho_an.begin(), rho_an.end(), 0);
         std::fill(p_an.begin(), p_an.end(), 0);
 
-
-        
         for (size_t i = 0; i < this->n_faces(); i++)
         {
 
@@ -52,6 +51,7 @@ public:
             U_plus[i].resize(faces[i].size());
             U_minus[i].resize(faces[i].size());
             U_temp[i].resize(dim);
+            U_temp_1[i].resize(dim);
             source_plus[i].resize(dim);
 
             for (size_t j = 0; j < faces[i].size(); j++)
@@ -61,8 +61,6 @@ public:
                 U_plus[i][j].resize(dim);
                 U_minus[i][j].resize(dim);
             }
-
-
         }
 
         std::ifstream ifs("input/parameters.json");
@@ -70,11 +68,11 @@ public:
 
         CFL = parameters["CFL"];
         var_gamma = parameters["var_gamma"];
+        implicit_iternum = parameters["implicit_iternum"];
+        implicit_solve_on = parameters["implicit_solve_on"];
 
-
-
-        N = 1;
-        h0 = 10;
+        N = 1;   // very small face number to be changed
+        h0 = 10; // very big length of an edge to be changed
         for (size_t n_face = 0; n_face < this->n_faces(); n_face++)
         {
             if (faces[n_face].size() > N)
@@ -105,31 +103,31 @@ public:
 
         t = 0;
         steps = 0;
-       
     };
 
-    void set_min_values(){
+    void set_min_values()
+    {
 
-        double min_p=1e100, min_rho=1e100,p;
-        
+        double min_p = 1e100, min_rho = 1e100, p;
+
         for (size_t i = 0; i < this->n_faces(); i++)
         {
-            if(U[i][0]<min_rho)
-                min_rho=U[i][0];
+            if (U[i][0] < min_rho)
+                min_rho = U[i][0];
 
-            p=pressure_fc(U[i], i);
-            if(p<min_p)
-                min_p=p;
-
+            p = pressure_fc(U[i], i);
+            if (p < min_p)
+                min_p = p;
         }
 
-        density_floor=min_rho*1e-9;
-        pressure_floor=min_p*1e-9;
-
+        density_floor = min_rho * 1e-9;
+        pressure_floor = min_p * 1e-9;
     };
 
+
+
     void do_step(double dt0)
-    { // RK2
+    { // RK2 or implicit trapezioidal
 
         dt = dt0;
         U_temp = U;
@@ -147,69 +145,140 @@ public:
         if (dt > extra_dt)
             dt = extra_dt;
 
-        //std::cout<<extra_dt<<"\n";
-
-
-        // if(steps==0)
-        // dt=1e-2;
-
-        find_U_edges();
-        find_flux_var();
-
-        res2d(dt / 2); // res2d makes U = dt/2*phi(U)
-        // res2d(dt);
-
-        for (size_t i = 0; i < this->n_faces(); i++)
+        if (implicit_solve_on)
         {
-
-            /*for (size_t k = 0; k < dim; k++)
+            //first iteration is different
+            //initial U is euler explicit
+            
+            
+            /*
+            find_U_edges();
+            find_flux_var();
+            res2d(dt); //  U = dt*phi(U)
+            
+            for (size_t i = 0; i < this->n_faces(); i++)
             {
-                U_temp[i][k] += U[i][k]; //U_temp = U+dt*phi(U)
-                U[i][k] += U_temp[i][k];  //U = U_temp = U+dt*phi(U)
 
-            }*/
-
-            for (size_t k = 0; k < dim; k++)
-            {
-                // U_temp[i][k] += U[i][k];
-                U[i][k] += U_temp[i][k];
+                if (U[i][0] < density_floor)
+                    U[i][0] = density_floor; // density floor
             }
 
-            if (U[i][0] < density_floor)
-                U[i][0] = density_floor; // density floor
+            U_temp_1 = U;
+            find_U_edges();
+            find_flux_var();
+            res2d(dt); //  U = dt*phi(dt*phi(U))
+            
+            //now U = dt*phi(dt*phi(U)); U_temp=U (initial); U_temp_1=dt*phi(U)
+
+
+            for (size_t i = 0; i < this->n_faces(); i++)
+                {
+
+                    for (size_t k = 0; k < dim; k++)
+                    {
+                        U[i][k] = U_temp[i][k]+U[i][k]/2+U_temp_1[i][k];
+                    }
+                    if (U[i][0] < density_floor)
+                        U[i][0] = density_floor; // density floor
+                }*/
+
+            find_U_edges();
+            find_flux_var();
+
+            res2d(dt / 2); // res2d makes U = dt/2*phi(U)
+        
+            for (size_t i = 0; i < this->n_faces(); i++)
+            {
+
+                for (size_t k = 0; k < dim; k++)
+                {
+                    U_temp_1[i][k]=2*U[i][k];
+                    U[i][k] += U_temp[i][k];
+                }
+
+                if (U[i][0] < density_floor)
+                    U[i][0] = density_floor; // density floor
+            }
+
+            find_U_edges();
+            find_flux_var();
+            res2d(dt); // U=dt*phi( U+dt/2*phi(U))
+
+            for (size_t i = 0; i < this->n_faces(); i++)
+            {
+
+                for (size_t k = 0; k < dim; k++)
+                {
+                    U[i][k] += U_temp[i][k];
+                }
+                if (U[i][0] < density_floor)
+                    U[i][0] = density_floor; // density floor
+            }
+
+            
+            for (size_t iternum = 1; iternum < implicit_iternum; iternum++)
+            {
+                
+                double temp0 = 0;
+                find_U_edges();
+                find_flux_var();
+                res2d(dt); // U = dt*phi(U_prev )
+
+                for (size_t i = 0; i < this->n_faces(); i++)
+                {
+
+                    for (size_t k = 0; k < dim; k++)
+                    {   
+
+                        temp0+=U[i][k];
+                        U[i][k] = U[i][k]/2+U_temp_1[i][k]/2+U_temp[i][k]; // U=U+1/2*dt*phi(U)+1/2*dt*phi(dt*phi(U))
+                        temp0-=U[i][k];
+
+                        
+                    }
+                    if (U[i][0] < density_floor)
+                        U[i][0] = density_floor; // density floor
+                }
+                //std::cout<<" Implicit iteration "<<iternum<<" diff= "<<temp0<<std::endl;
+            }
+
+        
         }
-
-        find_U_edges();
-        find_flux_var();
-        res2d(dt); // U=dt*phi( U+dt/2*phi(U))
-
-        // U_res = U+dt*phi(U) + dt/2 * phi(U+dt*phi(U))
-        for (size_t i = 0; i < this->n_faces(); i++)
+        else
         {
 
-            for (size_t k = 0; k < dim; k++)
+            find_U_edges();
+            find_flux_var();
+
+            res2d(dt / 2); // res2d makes U = dt/2*phi(U)
+
+            for (size_t i = 0; i < this->n_faces(); i++)
             {
-                // U[i][k]=U[i][k]/2.+U_temp[i][k];
-                U[i][k] += U_temp[i][k];
+
+                for (size_t k = 0; k < dim; k++)
+                {
+                    U[i][k] += U_temp[i][k];
+                }
+
+                if (U[i][0] < density_floor)
+                    U[i][0] = density_floor; // density floor
             }
-            if (U[i][0] < density_floor)
-                U[i][0] = density_floor; // density floor
-        }
 
-        // old RK2
-        /*res2d(dt / 2.); // res2d makes U = dt/2*phi(U)
-        for (size_t i = 0; i < this->n_faces(); i++)
-        {
+            find_U_edges();
+            find_flux_var();
+            res2d(dt); // U=dt*phi( U+dt/2*phi(U))
 
-            for (size_t k = 0; k < dim; k++)
+            for (size_t i = 0; i < this->n_faces(); i++)
             {
-                U[i][k] += U_temp[i][k]; // results in U=U+dt/2*phi(U)
+
+                for (size_t k = 0; k < dim; k++)
+                {
+                    U[i][k] += U_temp[i][k];
+                }
+                if (U[i][0] < density_floor)
+                    U[i][0] = density_floor; // density floor
             }
         }
-
-        find_U_edges();
-        find_flux_var();
-        res2d(dt); // U=dt*phi(U+dt/2*phi(U))*/
 
         double temp = 0;
         double l1, l2, l3 = 0;
@@ -257,7 +326,7 @@ public:
 
     void set_time(double t_new)
     {
-        t=t_new;
+        t = t_new;
     }
 
     bool get_stop_check()
@@ -298,11 +367,10 @@ protected:
                         exit(1);
                     }
 
-                    U[i][k] -= dt_here * (distance(vertices[faces[i][j]],vertices[faces[i][j1]]) / surface_area[i]) *(flux_var_minus[i][j][k]); //todo:pre-compute distances maybe
+                    U[i][k] -= dt_here * (distance(vertices[faces[i][j]], vertices[faces[i][j1]]) / surface_area[i]) * (flux_var_minus[i][j][k]); // todo:pre-compute distances maybe
                     // U[i][k] -= dt_here * (vertices[faces[i][j]]-vertices[faces[i][j1]]).norm() / surface_area[i] *(flux_var_minus[i][j][k]);
 
-                    //U[i][k] -= round_diff * dt_here * (vertices[faces[i][j]] - vertices[faces[i][j1]]).norm() / surface_area[i] * (flux_var_minus[i][j][k]);
-
+                    // U[i][k] -= round_diff * dt_here * (vertices[faces[i][j]] - vertices[faces[i][j1]]).norm() / surface_area[i] * (flux_var_minus[i][j][k]);
                 }
             }
         }
@@ -355,9 +423,10 @@ private:
             l_vec[2] = U[i][3];
             rho = U[i][0];
 
-            if (rho < density_floor){
+            if (rho < density_floor)
+            {
                 rho = density_floor;
-                U[i][0]=density_floor;
+                U[i][0] = density_floor;
             }
             vel = cross_product(face_centers[i] / face_centers[i].norm(), l_vec);
             vel /= rho;
@@ -410,8 +479,7 @@ private:
 
         for (size_t i = 0; i < this->n_faces(); i++) // tag1
         {
-            U[i][4] = pressure_fc(U[i], i); 
-
+            U[i][4] = pressure_fc(U[i], i);
 
             U[i][0] -= rho_an[i];
             U[i][4] -= p_an[i];
@@ -461,7 +529,7 @@ private:
                         // std::cout<<pm[4]<<" "<<pp[4]<<"  "<<lim[4]<<"\n";
 
                         U_plus[i][j][k] = E_edge(U_plus[i][j], i, j); // p -> E (tag1)
-                        //std::cout<<U_plus[i][j][k]<<"\n";
+                        // std::cout<<U_plus[i][j][k]<<"\n";
                     }
                     else
                     {
@@ -557,7 +625,7 @@ private:
     double pressure_fc(std::vector<double> &u, int n_face) // u[4] == energy
     {                                                      // to do: make state_vector a class and turn this into a method
         vector3d<double> l_vec, vel, r;
-        //double pressure_floor = 1e-16;
+        // double pressure_floor = 1e-16;
         l_vec[0] = u[1];
         l_vec[1] = u[2];
         l_vec[2] = u[3];
@@ -574,8 +642,8 @@ private:
         vel = cross_product(r, l_vec);
         vel /= -u[0];
 
-        //double gam_0 = make_gam(u, r);
-        
+        // double gam_0 = make_gam(u, r);
+
         double gam_0 = gam;
 
         if (var_gamma)
@@ -598,39 +666,34 @@ private:
             {
                 beta = 1 - pow(2 / C, 4);
             }
-            
+
             double beta_ceil = 1 - 1e-9, beta_floor = 0;
 
-            if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
-            beta = beta_ceil;
+            if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
+                beta = beta_ceil;
 
             beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
             beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
 
-           //double gam3d = 1 / (2 - gam);
-           // gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
-            //gam_0 = 2 - 1 / gam_0; // 2d ver
+            // double gam3d = 1 / (2 - gam);
+            //  gam_0 = gam3d - (gam3d - 4. / 3) / (1 + beta / (3 * (1 - beta) * (gam3d - 1)));
+            // gam_0 = 2 - 1 / gam_0; // 2d ver
 
-            if (beta < beta_floor ) // beta limitations
-            beta = beta_floor;
+            if (beta < beta_floor) // beta limitations
+                beta = beta_floor;
 
-             if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
-            beta = beta_ceil;
+            if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
+                beta = beta_ceil;
 
-
-            gam_0=(10-3*beta)/(8-3*beta);
+            gam_0 = (10 - 3 * beta) / (8 - 3 * beta);
         }
-
-        
-
-
 
         // return (u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1) / gam; // v3 = compressed star + sin
         return std::max(pressure_floor, (u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1)); // v4
     }
 
     double E_edge(std::vector<double> &u, int n_face, int n_edge) // u[4] == pressure
-    {  // because we reconstruct pressure on edge we needed new formula for beta
+    {                                                             // because we reconstruct pressure on edge we needed new formula for beta
         vector3d<double> l_vec, vel, r;
 
         l_vec[0] = u[1];
@@ -648,9 +711,6 @@ private:
         vel /= (-u[0]);
 
         double gam_0 = gam;
-
-
-
 
         if (var_gamma)
         {
@@ -672,26 +732,23 @@ private:
             {
                 beta = 1 - pow(2 / C, 4);
             }
-            
+
             double beta_ceil = 1 - 1e-9, beta_floor = 0;
 
-            if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
-            beta = beta_ceil;
+            if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
+                beta = beta_ceil;
 
             beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
             beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
 
-            if (beta < beta_floor ) // beta limitations
-            beta = beta_floor;
+            if (beta < beta_floor) // beta limitations
+                beta = beta_floor;
 
-             if (beta > beta_ceil|| std::isnan(beta)||std::isinf(beta))
-            beta = beta_ceil;
+            if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
+                beta = beta_ceil;
 
-
-
-            gam_0=(10-3*beta)/(8-3*beta);
+            gam_0 = (10 - 3 * beta) / (8 - 3 * beta);
         }
-       
 
         return 1 / (gam_0 - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2;
     }

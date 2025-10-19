@@ -1,10 +1,11 @@
 {
+    "input_file":"input/input.dat",
     "dim": 5,
     "CFL": 0.2,
     "dt": 0.25,
     "t_max": 45000,
-    "maxstep":150,
-    "skipstep": 500,
+    "maxstep":1,
+    "skipstep": 300,
     "gam3d":1.6666666666666666666666666666666,
     "omega_ns":0.01,
     "threads":8,
@@ -17,8 +18,10 @@
     "friction_on":true,
     "alpha":1e-4,
     "var_gamma":true,
-    "smooth_acc_on":true,
+    "smooth_acc_on":false,
     "t_acc":50000,
     "extra_heat_on":true,
-    "extra_heat_power":3e-9
+    "extra_heat_power":3e-9,
+    "implicit_solve_on":true,
+    "implicit_iternum":4
 }

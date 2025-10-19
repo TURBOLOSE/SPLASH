@@ -30,9 +30,10 @@ int main()
     size_t threads = parameters["threads"];
 
     bool accretion_on = parameters["accretion_on"];
+    std::string input_f=parameters["input_file"];
 
     //std::string input_f="input/input.dat";
-    std::string input_f="input/final_state(t=0.25).dat";
+    //std::string input_f="input/final_state(t=0.25).dat";
     std::ifstream inData(input_f);
 
     double t_0=0;
