@@ -468,6 +468,7 @@ protected:
         double g_eff = GM - vel.norm() * vel.norm();
         double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
         double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
+        double kappa = 3.4e6; // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
         // new expression for C
         double C = 12. / 5 * k_m * u[0] / (3 * u[4]) * pow(3. / 4 * c_sigma * g_eff * u[0], 1. / 4);
         double beta_switch = 0.5479; // switch point for initial function
@@ -623,14 +624,18 @@ protected:
             res[1] -= dmdt * rxv[0];
             res[2] -= dmdt * rxv[1];
             res[3] -= dmdt * rxv[2];
-            res[4] -= dmdt * (gam_0 / (gam_0 - 1) * u[4] / u[0] + (vel.norm() * vel.norm()) / 2.);
 
-            en_loss_fall+=dt/2.* dmdt * (gam_0 / (gam_0 - 1) * u[4] / u[0] + (vel.norm() * vel.norm()) / 2.) * surface_area[n_face];
+            //res[4] -= dmdt * (gam_0 / (gam_0 - 1) * u[4] / u[0] + (vel.norm() * vel.norm()) / 2.);
+            //en_loss_fall+=dt/2.* dmdt * (gam_0 / (gam_0 - 1) * u[4] / u[0] + (vel.norm() * vel.norm()) / 2.) * surface_area[n_face];
+            //old fall terms  
             
 
-
-
+            res[4]-= dmdt * gam_0 / (gam_0 - 1) * u[4] / u[0]+g_eff*std::sqrt(gam_0*u[4] / u[0])/(3*kappa*(gam_0-1));
+            en_loss_fall+=dt/2.* (dmdt * gam_0 / (gam_0 - 1) * u[4] / u[0]+g_eff*std::sqrt(gam_0*u[4] / u[0])/(3*kappa*(gam_0-1)))* surface_area[n_face];
             en_loss_fall_o=en_loss_fall;
+
+
+
             // discontinious friction
             //  double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
             //  double g_eff = GM - vel.norm() * vel.norm();

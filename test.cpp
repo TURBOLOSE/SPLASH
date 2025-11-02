@@ -118,13 +118,13 @@ int main()
     std::vector<double> lightcurves, en_changes;
 
     lightcurves = test2.get_light_curves();
-    out_lc_0 << test2.time() << " " << lightcurves[0] << "\n";
+    out_lc_0<<std::setprecision(9) << test2.time() << " " << lightcurves[0] << "\n";
     out_lc_0.flush();
-    out_lc_45 << test2.time() << " " << lightcurves[1] << "\n";
+    out_lc_45<<std::setprecision(9) << test2.time() << " " << lightcurves[1] << "\n";
     out_lc_45.flush();
-    out_lc_90 << test2.time() << " " << lightcurves[2] << "\n";
+    out_lc_90<<std::setprecision(9) << test2.time() << " " << lightcurves[2] << "\n";
     out_lc_90.flush();
-    out_lc_180 << test2.time() << " " << lightcurves[3] << "\n";
+    out_lc_180<<std::setprecision(9) << test2.time() << " " << lightcurves[3] << "\n";
     out_lc_180.flush();
 
 
@@ -145,13 +145,13 @@ int main()
         test2.do_step(dt);
 
         lightcurves = test2.get_light_curves();
-        out_lc_0 << test2.time() << " " << lightcurves[0] << "\n";
+        out_lc_0<<std::setprecision(9) << test2.time() << " " << lightcurves[0] << "\n";
         out_lc_0.flush();
-        out_lc_45 << test2.time() << " " << lightcurves[1] << "\n";
+        out_lc_45<<std::setprecision(9) << test2.time() << " " << lightcurves[1] << "\n";
         out_lc_45.flush();
-        out_lc_90 << test2.time() << " " << lightcurves[2] << "\n";
+        out_lc_90<<std::setprecision(9) << test2.time() << " " << lightcurves[2] << "\n";
         out_lc_90.flush();
-        out_lc_180 << test2.time() << " " << lightcurves[3] << "\n";
+        out_lc_180<<std::setprecision(9) << test2.time() << " " << lightcurves[3] << "\n";
         out_lc_180.flush();
 
 
