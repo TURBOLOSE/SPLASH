@@ -629,9 +629,10 @@ protected:
             //en_loss_fall+=dt/2.* dmdt * (gam_0 / (gam_0 - 1) * u[4] / u[0] + (vel.norm() * vel.norm()) / 2.) * surface_area[n_face];
             //old fall terms  
             
+            double f_r=6e-3/(alpha/1e-4 * u[0])*(1-beta)*pow(vel.norm()/std::sqrt(gam_0*u[4]/u[0]),2);
 
-            res[4]-= dmdt * gam_0 / (gam_0 - 1) * u[4] / u[0]+g_eff*std::sqrt(gam_0*u[4] / u[0])/(3*kappa*(gam_0-1));
-            en_loss_fall+=dt/2.* (dmdt * gam_0 / (gam_0 - 1) * u[4] / u[0]+g_eff*std::sqrt(gam_0*u[4] / u[0])/(3*kappa*(gam_0-1)))* surface_area[n_face];
+            res[4]-= dmdt * (gam_0 / (gam_0 - 1) * u[4]*(1-f_r) / u[0] + (vel.norm() * vel.norm()) / 2.);
+            en_loss_fall+=dt/2.* (dmdt * gam_0 / (gam_0 - 1) * u[4]*(1-f_r)  / u[0]+g_eff*std::sqrt(gam_0*u[4] / u[0])/(3*kappa*(gam_0-1)))* surface_area[n_face];
             en_loss_fall_o=en_loss_fall;
 
 
