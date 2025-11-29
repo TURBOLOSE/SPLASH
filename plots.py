@@ -298,8 +298,8 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
 
 
-projection_plots("p", path='plots/results4s/', min=0, max=0,skipstep=100, print_residuals=False, 
-                 log=True, add_streamplot=False, deltaplot=False, reldeltaplot=False)
+projection_plots("rho", path='plots/results_partialheatloss/', min=0, max=0,skipstep=1, print_residuals=False, 
+                 log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False)
 
 
 

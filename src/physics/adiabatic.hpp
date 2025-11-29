@@ -409,6 +409,12 @@ protected:
         vel = cross_product(edge_center, l_vec);
         vel /= (-u_in[0]) * edge_center.norm();
 
+
+        if(vel.norm()>1){
+            stop_check=true;
+            std::cout<<"superluminal vel in flux calculation: "<<vel.norm()<<"\n";           
+        }
+
         // PI = (u_in[4] - u_in[0] * vel.norm() * vel.norm() / 2.) * (gam - 1);
         PI = pressure(u_in, vel, edge_center);
         ndv = dot_product(edge_normals[n_face][n_edge], vel);
@@ -450,6 +456,11 @@ protected:
         fc_normed = face_centers[n_face] / face_centers[n_face].norm();
         vel = cross_product(fc_normed, l_vec);
         vel /= (-u[0]);
+
+         if(vel.norm()>1){
+            stop_check=true;
+            std::cout<<"superluminal vel in source calculation: "<<vel.norm()<<"\n";           
+        }
 
         double theta = std::acos(face_centers[n_face][2] / face_centers[n_face].norm());
 
