@@ -253,19 +253,19 @@ def make_input_5_sp_layer_exp():
     
     face_centers=np.array(face_centers)
    
-    turn_angle=0.2
+    turn_angle=0
     turn_matrix=np.matrix([[np.cos(turn_angle),0, np.sin(turn_angle)],[0,1,0],[-np.sin(turn_angle),0, np.cos(turn_angle)]])
 
 
     rho=np.ones(N) #10^7 g/cm^2
     #c_s=2*10**(-3)/V_conv 
-    c_s=2*10**(-3)/V_conv 
+    c_s=1.2*10**(-4)/V_conv 
     omega_ns=0
 
 
-    omega=np.matmul(turn_matrix,np.array([0,0,0.07]))/V_conv #c
+    #omega=np.matmul(turn_matrix,np.array([0,0,0.01]))/V_conv #c
 
-    #omega=np.array([0,0,0.01])/V_conv #c
+    omega=np.array([0,0,0.01])/V_conv #c
     
 
 
@@ -357,8 +357,9 @@ def make_input_5_sp_layer_diff_rot():
    
 
     rho=np.ones(N) #10^7 g/cm^2
+    #c_s=2*10**(-3)/V_conv  
     #c_s=2*10**(-3)/V_conv 
-    c_s=2*10**(-3)/V_conv 
+    c_s=6*10**(-2)/V_conv 
     omega_ns=0
 
 
@@ -366,7 +367,7 @@ def make_input_5_sp_layer_diff_rot():
 
     omega_0=omega
     
-    rho_0=rho[0]/130
+    rho_0=rho[0]/1000
     p_0=c_s**2*rho_0/gam
     
     a_0=np.sqrt(gam*p_0/rho_0)
@@ -506,8 +507,6 @@ def make_input_5_const_entr():
 #make_input_5_sp_layer()
 
 #make_input_5_sp_layer_exp()
-
-
 make_input_5_sp_layer_diff_rot()
 
 

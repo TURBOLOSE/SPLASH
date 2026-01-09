@@ -298,7 +298,7 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
 
 
-projection_plots("rho", path='plots/results_partialheatloss/', min=0, max=0,skipstep=1, print_residuals=False, 
+projection_plots("mach", path='results/', min=0, max=0,skipstep=1, print_residuals=False, 
                  log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False)
 
 
@@ -310,8 +310,8 @@ projection_plots("rho", path='plots/results_partialheatloss/', min=0, max=0,skip
 def integrated_plot(value): 
     #value = rho,p
 
-    #path='results/'
-    path='plots/cooling/'
+    path='results/'
+    #path='plots/cooling/'
 
 
     if(value=='rho'):
@@ -320,6 +320,24 @@ def integrated_plot(value):
     elif(value=='p'):
         data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
         label_pr='Pressure'
+    elif(value=='vel_abs'):
+        print("speed")
+        label_pr='Speed'
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
+        face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
+        maxstep=len(data_rho.loc[:,0])
+        n_faces=len(data_rho.loc[0,:])-1
+
+        face_centers=np.array(face_centers)/(np.array([np.linalg.norm(np.array(face_centers), axis=1),
+        np.linalg.norm(np.array(face_centers), axis=1),np.linalg.norm(np.array(face_centers), axis=1)]).T)
+
+        for i in range(maxstep):
+            L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
+            rho0=data_rho.loc[i,1:]
+            data_rho.loc[i,1:]=np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0
     else:
         print("wrong type of plot value")
         return
@@ -378,7 +396,7 @@ def integrated_plot(value):
     plt.close()
 
 
-integrated_plot('p')
+integrated_plot('vel_abs')
 
 
 

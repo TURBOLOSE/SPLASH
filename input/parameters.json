@@ -4,8 +4,8 @@
     "CFL": 0.2,
     "dt": 0.25,
     "t_max": 45000,
-    "maxstep":1000,
-    "skipstep": 20,
+    "maxstep":20001,
+    "skipstep": 200,
     "gam3d":1.6666666666666666666666666666666,
     "omega_ns":0.01,
     "threads":12,
@@ -23,5 +23,5 @@
     "extra_heat_on":true,
     "extra_heat_power":3e-9,
     "implicit_solve_on":true,
-    "implicit_iternum":4
+    "implicit_iternum":3
 }

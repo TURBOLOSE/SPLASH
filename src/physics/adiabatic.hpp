@@ -66,7 +66,7 @@ public:
 
         std::string adrs[] = {"results/Lx.dat", "results/Ly.dat", "results/Lz.dat"};
 
-        for (size_t i; i < 3; i++)
+        for (size_t i=0; i < 3; i++)
         {
 
             outfile_l[i].open(adrs[i], std::ios::out | std::ios::trunc);
@@ -235,7 +235,7 @@ public:
 
     void write_t_L()
     {
-        for (size_t i; i < 3; i++)
+        for (size_t i=0; i < 3; i++)
         {
 
             outfile_l[i] << this->time() << "  ";
@@ -612,7 +612,7 @@ protected:
             wr *= -alpha * rho * (vel - vel0).norm();
             l_fr = cross_product(fc_normed, wr);
 
-            res[1] += l_fr[0];
+            res[1] += l_fr[0]; 
             res[2] += l_fr[1];
             res[3] += l_fr[2];
             res[4] -= alpha * rho * (vel - vel0).norm()*(dot_product(vel,vel0)-dot_product(vel0,vel0));
@@ -627,10 +627,21 @@ protected:
             en_loss_fric_o= en_loss_fric;
             //res[4] -= alpha * u[0] * omega_acc_abs * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
             // res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
-
             // total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
-            total_mass_loss -= alpha * u[0] * omega_acc_abs * surface_area[n_face];
-            double dmdt= alpha * u[0] * omega_acc_abs; //fall terms
+
+            //depletion
+            //total_mass_loss -= alpha * u[0] * omega_acc_abs * surface_area[n_face];
+            //double dmdt= alpha * u[0] * omega_acc_abs; //fall terms
+
+            total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
+            double dmdt= alpha * rho * (vel - vel0).norm(); //fall terms
+
+            //total_mass_loss -=3./4*(1-beta)*g_eff*u[0];
+            //double dmdt = 3./4*(1-beta)*g_eff*u[0];
+
+            //double fall_eff = 1e-4; //temp
+            //dmdt*=fall_eff;
+
             res[0] -= dmdt;
             res[1] -= dmdt * rxv[0];
             res[2] -= dmdt * rxv[1];
