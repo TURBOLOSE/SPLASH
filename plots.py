@@ -156,7 +156,8 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
         colorm2 = plt.get_cmap('inferno')
         v=np.sqrt(xd_gr**2+yd_gr**2)
-        norm2 = mpl.colors.Normalize(vmin=np.min(v), vmax=np.max(v))
+        mask=~np.isnan(v)
+        norm2 = mpl.colors.Normalize(vmin=np.abs(np.min(v[mask])), vmax=np.abs(np.max(v[mask])))
 
 
 
@@ -271,7 +272,11 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
             collection = PatchCollection(patches)
             colors=colorm(norm(data_rho.loc[i,1:len(faces)]))
 
-            fig, ax = plt.subplots(figsize=(16, 10), layout='constrained', nrows=2,height_ratios=[15,1])
+
+            if(add_streamplot):
+                fig, ax = plt.subplots(figsize=(18, 10), layout='constrained', nrows=3,height_ratios=[16,1,1])
+            else:
+                fig, ax = plt.subplots(figsize=(16, 10), layout='constrained', nrows=2,height_ratios=[15,1])
             #fig.tight_layout()
             plt.subplots_adjust(hspace=10)
             #rho=(np.array(data_rho.loc[i,1:len(faces)])-min_rho)/(max_rho-min_rho)
@@ -286,11 +291,15 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
             ax[0].set_xlim([-2.5, 3.4])
             ax[0].set_ylim([-1.5, 1.5])
 
-            if(add_streamplot):
-                ax[0].streamplot(X_gr,Y_gr,xd_gr[i],yd_gr[i],color=v[i],norm=norm2, cmap=colorm2, arrowsize=3)
 
 
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colorm),cax=ax[1], orientation='horizontal', label=label_pr)
+
+            if(add_streamplot):
+                ax[0].streamplot(X_gr,Y_gr,xd_gr[i],yd_gr[i],color=v[i],norm=norm2, cmap=colorm2, arrowsize=3)
+                fig.colorbar(mpl.cm.ScalarMappable(norm=norm2, cmap=colorm2),cax=ax[2], orientation='horizontal', label=r"v/c")
+
+
             fig.savefig('plots/fig'+"{0:0>4}".format(i)+'.png', bbox_inches='tight',dpi=200)
             plt.clf()
             plt.close()
@@ -298,8 +307,8 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
 
 
-projection_plots("mach", path='results/', min=0, max=0,skipstep=1, print_residuals=False, 
-                 log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False)
+projection_plots("mach", path='results/', min=0, max=0,skipstep=5, print_residuals=False, 
+                 log=False, add_streamplot=True, deltaplot=False, reldeltaplot=False)
 
 
 
@@ -628,4 +637,89 @@ def vel_plot( remove_avg_omega:bool=False):
 
 
 vel_plot(remove_avg_omega=True)
+
+
+
+def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=0, ylim_max:float=0):
+
+
+    data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+    face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
+    face_centers=np.array(face_centers)
+    theta_fc=-np.arccos(np.array(face_centers[:,2])/np.linalg.norm(face_centers, axis=1))+np.pi/2
+    if(value=='rho'):
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        label_pr=r'$\Sigma$, $10^7 \rm g \ \rm cm^{-2}$ '
+    elif(value=='p'):
+        data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        label_pr='Pressure'
+    elif(value=='omega'):
+        data_rho=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+")
+        label_pr='Omega_z'
+    elif(value=='vort'):
+        data_rho=pd.read_table(path+'curl.dat', header=None, delimiter=r"\s+")
+        #label_pr='Vorticity'
+        label_pr=r'Vorticity, $\Omega$ '
+        #label_pr='Bernoulli integral -1 /R'
+    elif(value=='beta'):
+        data_rho=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
+        label_pr=r'$\beta$ '
+    elif(value=='mach'):
+        data_rho=pd.read_table(path+'mach.dat', header=None, delimiter=r"\s+")
+        label_pr='Mach number'
+    elif(value=='c_s'):
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        label_pr='Speed of sound'
+        data_rho.loc[:,1:]=data_p.loc[:,1:]/data_rho.loc[:,1:]
+        data_rho.loc[:,1:]=np.sqrt(1.25*data_rho.loc[:,1:])
+    elif(value=='entropy'):
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
+        label_pr='Entropy'
+        data_rho.loc[:,1:]=data_p.loc[:,1:]/(data_rho.loc[:,1:]**  ( (10-3*data_beta.loc[:,1:])/(8-3*data_beta.loc[:,1:]) )   )
+
+    elif(value=='vel_abs'):
+        print("speed")
+        label_pr='Speed'
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
+        face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
+        maxstep=len(data_rho.loc[:,0])
+        n_faces=len(data_rho.loc[0,:])-1
+
+        face_centers=np.array(face_centers)/(np.array([np.linalg.norm(np.array(face_centers), axis=1),
+        np.linalg.norm(np.array(face_centers), axis=1),np.linalg.norm(np.array(face_centers), axis=1)]).T)
+
+        for i in range(maxstep):
+            L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
+            rho0=data_rho.loc[i,1:]
+            data_rho.loc[i,1:]=np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0
+    else:
+        print("wrong type of plot value")
+        return
+
+    maxstep=len(data_rho.loc[:,0])
+
+    if(ylim_min==0 and ylim_max==0):
+        ylim_min=np.min(data_rho.loc[:,1:])*0.9
+        ylim_max=np.max(data_rho.loc[:,1:])*1.1
+
+    for i in tqdm(range(maxstep)):
+        if((i % skipstep)==0 ):
+            plt.scatter(theta_fc, data_rho.loc[i,1:], s=2)
+            plt.xlabel(r'$\theta$')
+            plt.ylabel(label_pr)
+            plt.title('t='+"{:.4f}".format(data_rho.loc[i,0]*3.3e-5)+' s')
+            plt.ylim([ylim_min, ylim_max])
+            plt.savefig('plots/plot_vs_theta_'+"{0:0>4}".format(i)+'.png', bbox_inches='tight',dpi=200)
+            plt.clf()
+            plt.close()
+
+
+
+plot_vs_theta('omega',path='plots/res26_2(1)/', skipstep=100, ylim_min=0, ylim_max=0.5)
 
