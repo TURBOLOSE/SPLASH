@@ -28,8 +28,8 @@ public:
         set_min_values();
 
         omega_ns = omega_ns_i;
-
-        betas.resize(this->n_faces());
+        size_t nf = this->n_faces();
+        betas.resize(nf);
 
         set_analytical_solution();
         if (dim != 5)
@@ -115,7 +115,7 @@ public:
 
     void print_rho()
     {
-        for (auto U_i : U)
+        for (const auto& U_i : U)
         {
             std::cout << U_i[0] << std::endl;
         }
@@ -124,7 +124,7 @@ public:
     void write_t_rho()
     {
         outfile << this->time() << "  ";
-        for (auto U_i : U)
+        for (const auto& U_i : U)
         {
 
             outfile << U_i[0] << " ";
@@ -195,7 +195,8 @@ public:
         double vort;
         outfile_curl << this->time() << "  ";
         size_t n_edge_1;
-        for (size_t n_face = 0; n_face < this->n_faces(); n_face++)
+        size_t nf=this->n_faces();
+        for (size_t n_face = 0; n_face < nf; n_face++)
         {
 
             l_vec[0] = U[n_face][1];
@@ -255,7 +256,8 @@ public:
         outfile_omega << this->time() << "  ";
         size_t n_edge_1;
         double theta, om_z;
-        for (size_t n_face = 0; n_face < this->n_faces(); n_face++)
+        size_t nf=this->n_faces();
+        for (size_t n_face = 0; n_face < nf; n_face++)
         {
             theta = std::acos(face_centers[n_face][2] / face_centers[n_face].norm());
             l_vec[0] = U[n_face][1];
@@ -303,8 +305,9 @@ public:
 
         double flux_tot_0 = 0, flux_tot_45 = 0, flux_tot_90 = 0, flux_tot_180 = 0;
         double phi_fc, theta_fc, d_vec, cos_alpha, PI;
+        size_t nf=this->n_faces();
 
-        for (size_t n_face = 0; n_face < this->n_faces(); n_face++)
+        for (size_t n_face = 0; n_face < nf; n_face++)
         {
             phi_fc = std::atan2(face_centers[n_face][1] / face_centers[n_face].norm(),
                                 face_centers[n_face][0] / face_centers[n_face].norm());
@@ -371,7 +374,8 @@ public:
         std::string s = ss.str();
         out_final.open(s);
 
-        for (size_t n_face = 0; n_face < this->n_faces(); n_face++)
+        size_t nf=this->n_faces();
+        for (size_t n_face = 0; n_face < nf; n_face++)
         {
             for (size_t j = 0; j < dim; j++)
             {
@@ -383,7 +387,7 @@ public:
 
 protected:
     // U = {rho, l1, l2, l3, E}
-    std::vector<double> flux(std::vector<double> u_in, int n_face, int n_edge)
+    std::vector<double> flux(std::vector<double>& u_in, int n_face, int n_edge)
     {
 
         std::vector<double> res;
@@ -431,9 +435,9 @@ protected:
         return res;
     }
 
-    virtual std::vector<double> flux_star(std::vector<double> ul, std::vector<double> ur, int n_face, int n_edge) = 0;
+    virtual std::vector<double> flux_star(std::vector<double>& ul, std::vector<double>& ur, int n_face, int n_edge) = 0;
 
-    std::vector<double> source(std::vector<double> u, int n_face)
+    std::vector<double> source(std::vector<double>& u, int n_face)
     { // du/dt
       // due to the weird reconstruction algorithm, u[4] here is the pressure \Pi
       // source should still return vector where res[4]=dE/dt
@@ -782,8 +786,8 @@ protected:
             double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
             double kappa = 3.4e6; // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
 
-
-            for (size_t i = 0; i < this->n_faces(); i++)
+            size_t nf=this->n_faces();
+            for (size_t i = 0; i <  nf; i++)
             {
 
                 fc_normed = face_centers[i] / face_centers[i].norm();
@@ -1024,7 +1028,7 @@ protected:
         return res;
     }
 
-    std::vector<double> limiter(std::vector<double> u_r, int n_face, int n_edge)
+    std::vector<double> limiter(std::vector<double>& u_r, int n_face, int n_edge)
     { // here U[4] is also pressure
 
         std::vector<double> res;

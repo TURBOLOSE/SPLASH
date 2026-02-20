@@ -14,7 +14,7 @@ public:
 
 protected:
     
-    std::vector<double> flux_star(std::vector<double> u_L, std::vector<double> u_R, int n_face, int n_edge)
+    std::vector<double> flux_star(std::vector<double>& u_L, std::vector<double>& u_R, int n_face, int n_edge)
     {   // HLLC+ flux
 
         std::vector<double> F_L, F_R, F_L_star, F_R_star, c_vel, D, F, flux_fix_R, flux_fix_L;

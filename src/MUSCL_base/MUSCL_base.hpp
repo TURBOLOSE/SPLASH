@@ -28,22 +28,22 @@ public:
         {
             std::cout << "U_in is wrong size, U_in.size() should be equal to mesh.n_faces()" << std::endl;
         }
-
+        size_t nf=this->n_faces();
         // memory allocation
-        flux_var_plus.resize(this->n_faces());
-        flux_var_minus.resize(this->n_faces());
-        U_plus.resize(this->n_faces());
-        U_minus.resize(this->n_faces());
-        U_temp.resize(this->n_faces());
-        U_temp_1.resize(this->n_faces());
-        source_plus.resize(this->n_faces());
-        rho_an.resize(this->n_faces());
-        p_an.resize(this->n_faces());
+        flux_var_plus.resize(nf);
+        flux_var_minus.resize(nf);
+        U_plus.resize(nf);
+        U_minus.resize(nf);
+        U_temp.resize(nf);
+        U_temp_1.resize(nf);
+        source_plus.resize(nf);
+        rho_an.resize(nf);
+        p_an.resize(nf);
 
         std::fill(rho_an.begin(), rho_an.end(), 0);
         std::fill(p_an.begin(), p_an.end(), 0);
 
-        for (size_t i = 0; i < this->n_faces(); i++)
+        for (size_t i = 0; i < nf; i++)
         {
 
             flux_var_plus[i].resize(faces[i].size());
@@ -73,7 +73,7 @@ public:
 
         N = 1;   // very small face number to be changed
         h0 = 10; // very big length of an edge to be changed
-        for (size_t n_face = 0; n_face < this->n_faces(); n_face++)
+        for (size_t n_face = 0; n_face < nf; n_face++)
         {
             if (faces[n_face].size() > N)
             {
@@ -109,8 +109,8 @@ public:
     {
 
         double min_p = 1e100, min_rho = 1e100, p;
-
-        for (size_t i = 0; i < this->n_faces(); i++)
+        size_t nf=this->n_faces();
+        for (size_t i = 0; i < nf; i++)
         {
             if (U[i][0] < min_rho)
                 min_rho = U[i][0];
@@ -129,6 +129,8 @@ public:
     void do_step(double dt0)
     { // RK2 or implicit trapezioidal
 
+
+        size_t nf=this->n_faces();
         dt = dt0;
         U_temp = U;
 
@@ -139,7 +141,6 @@ public:
         {
             dt = h0 * CFL / max_vel;
         }
-
         double extra_dt = extra_dt_constr();
 
         if (dt > extra_dt)
@@ -186,8 +187,8 @@ public:
             find_flux_var();
 
             res2d(dt / 2); // res2d makes U = dt/2*phi(U)
-        
-            for (size_t i = 0; i < this->n_faces(); i++)
+
+            for (size_t i = 0; i < nf; i++)
             {
 
                 for (size_t k = 0; k < dim; k++)
@@ -204,7 +205,7 @@ public:
             find_flux_var();
             res2d(dt); // U=dt*phi( U+dt/2*phi(U))
 
-            for (size_t i = 0; i < this->n_faces(); i++)
+            for (size_t i = 0; i < nf; i++)
             {
 
                 for (size_t k = 0; k < dim; k++)
@@ -224,7 +225,7 @@ public:
                 find_flux_var();
                 res2d(dt); // U = dt*phi(U_prev )
 
-                for (size_t i = 0; i < this->n_faces(); i++)
+                for (size_t i = 0; i < nf; i++)
                 {
 
                     for (size_t k = 0; k < dim; k++)
@@ -252,7 +253,7 @@ public:
 
             res2d(dt / 2); // res2d makes U = dt/2*phi(U)
 
-            for (size_t i = 0; i < this->n_faces(); i++)
+            for (size_t i = 0; i < nf; i++)
             {
 
                 for (size_t k = 0; k < dim; k++)
@@ -268,7 +269,7 @@ public:
             find_flux_var();
             res2d(dt); // U=dt*phi( U+dt/2*phi(U))
 
-            for (size_t i = 0; i < this->n_faces(); i++)
+            for (size_t i = 0; i < nf; i++)
             {
 
                 for (size_t k = 0; k < dim; k++)
@@ -285,7 +286,7 @@ public:
         double temp_E = 0;
         l1 = 0;
         l2 = 0;
-        for (size_t i = 0; i < this->n_faces(); i++)
+        for (size_t i = 0; i < nf; i++)
         {
 
             // for (size_t k = 0; k < dim; k++)
@@ -342,7 +343,8 @@ protected:
         double round_diff = distance(vertices[faces[0][1]], vertices[faces[0][2]]) / (vertices[faces[0][1]] - vertices[faces[0][2]]).norm();
 
         double d_pres;
-        for (size_t i = 0; i < this->n_faces(); i++)
+        size_t nf=this->n_faces();
+        for (size_t i = 0; i < nf; i++)
         {
             for (size_t k = 0; k < dim; k++) // source terms
                 U[i][k] = dt_here * source_plus[i][k];
@@ -376,9 +378,9 @@ protected:
         }
     };
 
-    virtual std::vector<double> flux_star(std::vector<double> ul, std::vector<double> ur, int n_face, int n_edge) = 0;
-    virtual std::vector<double> limiter(std::vector<double> u_r, int n_face, int n_edge) = 0;
-    virtual std::vector<double> source(std::vector<double> u, int n_face) = 0;
+    virtual std::vector<double> flux_star(std::vector<double>& ul, std::vector<double>& ur, int n_face, int n_edge) = 0;
+    virtual std::vector<double> limiter(std::vector<double>& u_r, int n_face, int n_edge) = 0;
+    virtual std::vector<double> source(std::vector<double>& u, int n_face) = 0;
     virtual double make_gam(std::vector<double> &u, vector3d<double> &r) = 0;
     virtual double extra_dt_constr() = 0;
     // virtual void set_analytical_solution();
@@ -390,7 +392,8 @@ private:
     {
         double max, f1, f2;
         max = 0.001;
-        for (size_t i = 0; i < this->n_faces(); i++)
+        size_t nf=this->n_faces();
+        for (size_t i = 0; i < nf; i++)
         {
             for (size_t j = 0; j < faces[i].size(); j++)
             {
@@ -416,7 +419,8 @@ private:
         max = 1e-8;
         double max_Mach = 0;
         vector3d<double> R_vec, vel, l_vec;
-        for (size_t i = 0; i < this->n_faces(); i++)
+        size_t nf=this->n_faces();
+        for (size_t i = 0; i < nf; i++)
         {
             l_vec[0] = U[i][1];
             l_vec[1] = U[i][2];
@@ -458,11 +462,11 @@ private:
 
     void find_flux_var()
     {
-
+        size_t nf=this->n_faces();
         omp_set_dynamic(0);           // Explicitly disable dynamic teams
         omp_set_num_threads(threads); // Use 8 threads for all consecutive parallel regions
 #pragma omp parallel for
-        for (int i = 0; i < this->n_faces(); i++)
+        for (int i = 0; i < nf; i++)
         {
             for (int j = 0; j < faces[i].size(); j++)
             {
@@ -476,8 +480,8 @@ private:
     {
 
         // std::vector<double> pp, pm, lim;
-
-        for (size_t i = 0; i < this->n_faces(); i++) // tag1
+        size_t nf=this->n_faces();
+        for (size_t i = 0; i < nf; i++) // tag1
         {
             U[i][4] = pressure_fc(U[i], i);
 
@@ -490,7 +494,7 @@ private:
         omp_set_num_threads(threads); // Use threads for all consecutive parallel regions
 
 #pragma omp parallel for
-        for (size_t i = 0; i < this->n_faces(); ++i)
+        for (size_t i = 0; i < nf; ++i)
         {
             for (size_t j = 0; j < faces[i].size(); ++j)
             {

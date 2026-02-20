@@ -2014,9 +2014,9 @@ private:
     inline bool has_garbage() const { return has_garbage_; }
 
     // io functions that need access to internal details
-    friend void read_pmp(SurfaceMesh&, const std::filesystem::path&);
-    friend void write_pmp(const SurfaceMesh&, const std::filesystem::path&,
-                          const IOFlags&);
+    // friend void read_pmp(SurfaceMesh&, const std::filesystem::path&);
+    // friend void write_pmp(const SurfaceMesh&, const std::filesystem::path&,
+    //                       const IOFlags&);
 
     // property containers for each entity type and object
     PropertyContainer vprops_;

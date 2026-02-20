@@ -79,7 +79,8 @@ public:
         num_t result;
         vector3d temp;
         temp = *this * *this;
-        result = std::reduce(temp.begin(), temp.end());
+        //result = std::reduce(temp.begin(), temp.end());
+        result=temp[0]+temp[1]+temp[2];
         return std::sqrt(result);
     
     };

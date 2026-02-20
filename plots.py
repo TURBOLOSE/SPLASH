@@ -307,8 +307,8 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
 
 
-projection_plots("mach", path='results/', min=0, max=0,skipstep=5, print_residuals=False, 
-                 log=False, add_streamplot=True, deltaplot=False, reldeltaplot=False)
+projection_plots("rho", path='results/', min=0, max=0,skipstep=1, print_residuals=False, 
+                 log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False)
 
 
 
@@ -405,7 +405,7 @@ def integrated_plot(value):
     plt.close()
 
 
-integrated_plot('vel_abs')
+#integrated_plot('vel_abs')
 
 
 
@@ -636,7 +636,7 @@ def vel_plot( remove_avg_omega:bool=False):
 
 
 
-vel_plot(remove_avg_omega=True)
+#vel_plot(remove_avg_omega=True)
 
 
 
@@ -721,5 +721,5 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
 
 
 
-plot_vs_theta('omega',path='plots/res26_2(1)/', skipstep=100, ylim_min=0, ylim_max=0.5)
+#plot_vs_theta('omega',path='plots/res26_2(1)/', skipstep=100, ylim_min=0, ylim_max=0.5)
 

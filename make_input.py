@@ -76,7 +76,7 @@ def make_input_4_cos_bell(): #no energy as separate variable
 
 
 def make_input_5():
-    gam0=4./3
+    gam0=5./3
     gam=2-1/gam0
     #face_centers=pd.read_table('results/face_centers_ico_6.dat', header=None, delimiter=r"\s+")
     face_centers=pd.read_table('results/face_centers.dat', header=None, delimiter=r"\s+")
@@ -85,10 +85,10 @@ def make_input_5():
 
     face_centers=np.array(face_centers)
 
-    rho=np.ones(N)*0.1
-    omega=np.array([0,0,0])
-    p=np.ones(N)
-    #p=1+(np.linalg.norm(omega)**2*rho/2*np.sin(-np.arccos(face_centers[:,2]))**2)
+    rho=np.ones(N)
+    omega=np.array([0,0,0.1])
+    #p=np.ones(N)
+    p=1+(np.linalg.norm(omega)**2*rho/2*np.sin(-np.arccos(face_centers[:,2]))**2)
     l=[]
     v=[]
 
@@ -116,8 +116,8 @@ def make_input_5():
 
         # if(np.abs(theta[face_num]-np.pi/2)<0.1):
         #   p[face_num]=1
-        # if r[face_num]<R0:
-        #    p[face_num]=50
+        if r[face_num]<R0:
+            rho[face_num]*=1.1
         #    #p[face_num]=350
 
         
@@ -136,6 +136,9 @@ def make_input_5():
         
     l=np.array(l)
     v=np.array(v)
+
+    print('mean_Mach= ',np.mean(np.linalg.norm(v, axis=1)/np.sqrt(gam*p/rho)))
+
 
     E=1/(gam-1)*p+rho*np.linalg.norm(v, axis=1)*np.linalg.norm(v, axis=1)/2
     if(E.any()<0):
@@ -501,13 +504,13 @@ def make_input_5_const_entr():
 
 
 #make_input_5_new_p()
-#make_input_5()
+make_input_5()
 #make_input_5_const_entr()
 
 #make_input_5_sp_layer()
 
 #make_input_5_sp_layer_exp()
-make_input_5_sp_layer_diff_rot()
+#make_input_5_sp_layer_diff_rot()
 
 
 #make_input_4()
