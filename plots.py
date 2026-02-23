@@ -10,8 +10,8 @@ from tqdm import tqdm
 from scipy.interpolate import griddata
 
 
-def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, skipstep:int=1, print_residuals:bool=False, 
-                     log:bool=False, add_streamplot:bool=False, deltaplot:bool=False, reldeltaplot:bool=False, skiprows:int=0 ): 
+def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, skipstep:int=1, print_residuals:bool=False, remove_avg_omega:bool=False, 
+                     log:bool=False, add_streamplot:bool=False, deltaplot:bool=False, reldeltaplot:bool=False ): 
     #value = rho,p,omega
     
     
@@ -25,45 +25,45 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
     #path='plots/spinup/'
 
     if(value=='rho'):
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         label_pr=r'$\Sigma$, $10^7 \rm g \ \rm cm^{-2}$ '
     elif(value=='p'):
-        data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
+        data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
         label_pr='Pressure'
     elif(value=='omega'):
-        data_rho=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
+        data_rho=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+")
         label_pr='Omega_z'
     elif(value=='vort'):
-        data_rho=pd.read_table(path+'curl.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
+        data_rho=pd.read_table(path+'curl.dat', header=None, delimiter=r"\s+")
         #label_pr='Vorticity'
         label_pr=r'Vorticity, $\Omega$ '
         #label_pr='Bernoulli integral -1 /R'
     elif(value=='beta'):
-        data_rho=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
+        data_rho=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
         label_pr=r'$\beta$ '
     elif(value=='mach'):
-        data_rho=pd.read_table(path+'mach.dat', header=None, delimiter=r"\s+", skipfooter=skipf,skiprows=skiprows)
+        data_rho=pd.read_table(path+'mach.dat', header=None, delimiter=r"\s+", skipfooter=skipf)
         label_pr='Mach number'
     elif(value=='c_s'):
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
-        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
         label_pr='Speed of sound'
         data_rho.loc[:,1:]=data_p.loc[:,1:]/data_rho.loc[:,1:]
         data_rho.loc[:,1:]=np.sqrt(1.25*data_rho.loc[:,1:])
     elif(value=='entropy'):
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
-        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
-        data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
         label_pr='Entropy'
         data_rho.loc[:,1:]=data_p.loc[:,1:]/(data_rho.loc[:,1:]**  ( (10-3*data_beta.loc[:,1:])/(8-3*data_beta.loc[:,1:]) )   )
 
     elif(value=='vel_abs'):
         print("speed")
         label_pr='Speed'
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
-        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
-        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
-        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
         face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
         maxstep=len(data_rho.loc[:,0])
         n_faces=len(data_rho.loc[0,:])-1
@@ -193,8 +193,9 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
     for face_num, face in enumerate(faces): #trick for variable length of each face (needed for hex meshes)
         faces_new.append(face[~np.isnan(face)].astype(int))
-
     faces=faces_new
+
+
 
 
     theta=-np.arccos(vertices[:,2])+np.pi/2
@@ -265,9 +266,49 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
    
 
+    om_mean=0
+    t=data_rho.loc[:,0]
+    if(remove_avg_omega):
+        data_om=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+")
+        data_om=data_om.loc[:,1:]
+        om_mean=np.mean(data_om,axis=1)
 
     for i in tqdm(range(maxstep)): #dens
         if((i % skipstep)==0 ):
+
+
+            if(remove_avg_omega):
+                phi=np.arctan2(vertices[:,1],vertices[:,0])-om_mean[i]*t[i]
+                k=np.floor((np.pi-phi)/(2*np.pi))
+                phi=phi+2*k*np.pi
+
+
+                x_plot=phi/(np.sqrt(2)) #projection
+
+
+                x_plot_full=[]
+
+
+                for face in faces:
+                    temp_x=[]
+                    for face_el in face:
+                        temp_x.append(x_plot[face_el])
+                    x_plot_full.append(temp_x)
+
+
+                for face_num,face in enumerate(faces): #fix x
+                    sign_arr=np.sign(x_plot_full[face_num])
+                    if( (not (0 in sign_arr)) and (1 in sign_arr) and (-1 in sign_arr) and (np.min(np.abs(x_plot_full[face_num])) > 1)):
+                        for j1,element in enumerate(x_plot_full[face_num]):
+                            if(element < 0):
+                                x_plot_full[face_num][j1]+=2*np.pi/np.sqrt(2)
+
+
+                patches = []
+
+                for face_num,face in enumerate(faces):
+                    polygon = Polygon(np.vstack([x_plot_full[face_num], y_plot_full[face_num]]).T,closed=True)
+                    patches.append(polygon)
 
             collection = PatchCollection(patches)
             colors=colorm(norm(data_rho.loc[i,1:len(faces)]))
@@ -307,8 +348,8 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
 
 
-projection_plots("beta", path='plots/res26_3/', min=0, max=0,skipstep=1, print_residuals=False, 
-                 log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, skiprows=200)
+projection_plots("rho", path='results/', min=0, max=0,skipstep=10,remove_avg_omega=True, print_residuals=False, 
+                 log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False)
 
 
 
@@ -405,7 +446,7 @@ def integrated_plot(value):
     plt.close()
 
 
-integrated_plot('vel_abs')
+#integrated_plot('vel_abs')
 
 
 
@@ -636,7 +677,7 @@ def vel_plot( remove_avg_omega:bool=False):
 
 
 
-vel_plot(remove_avg_omega=True)
+#vel_plot(remove_avg_omega=True)
 
 
 
@@ -721,5 +762,4 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
 
 
 
-plot_vs_theta('omega',path='plots/res26_2(1)/', skipstep=100, ylim_min=0, ylim_max=0.5)
-
+#plot_vs_theta('omega',path='plots/res26_2(1)/', skipstep=100, ylim_min=0, ylim_max=0.5)
