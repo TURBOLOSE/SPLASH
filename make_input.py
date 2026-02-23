@@ -86,7 +86,7 @@ def make_input_5():
     face_centers=np.array(face_centers)
 
     rho=np.ones(N)*0.1
-    omega=np.array([0,0,0])
+    omega=np.array([0,0,0.01])
     p=np.ones(N)
     #p=1+(np.linalg.norm(omega)**2*rho/2*np.sin(-np.arccos(face_centers[:,2]))**2)
     l=[]
@@ -116,9 +116,10 @@ def make_input_5():
 
         # if(np.abs(theta[face_num]-np.pi/2)<0.1):
         #   p[face_num]=1
-        # if r[face_num]<R0:
-        #    p[face_num]=50
-        #    #p[face_num]=350
+        if r[face_num]<R0:
+           #p[face_num]=1.1
+           rho[face_num]*=1.1
+           #p[face_num]=350
 
         
         # if(theta[face_num] >0):
@@ -501,13 +502,13 @@ def make_input_5_const_entr():
 
 
 #make_input_5_new_p()
-#make_input_5()
+make_input_5()
 #make_input_5_const_entr()
 
 #make_input_5_sp_layer()
 
 #make_input_5_sp_layer_exp()
-make_input_5_sp_layer_diff_rot()
+#make_input_5_sp_layer_diff_rot()
 
 
 #make_input_4()

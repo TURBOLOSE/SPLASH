@@ -11,7 +11,7 @@ from scipy.interpolate import griddata
 
 
 def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, skipstep:int=1, print_residuals:bool=False, 
-                     log:bool=False, add_streamplot:bool=False, deltaplot:bool=False, reldeltaplot:bool=False ): 
+                     log:bool=False, add_streamplot:bool=False, deltaplot:bool=False, reldeltaplot:bool=False, skiprows:int=0 ): 
     #value = rho,p,omega
     
     
@@ -25,45 +25,45 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
     #path='plots/spinup/'
 
     if(value=='rho'):
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
         label_pr=r'$\Sigma$, $10^7 \rm g \ \rm cm^{-2}$ '
     elif(value=='p'):
-        data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
         label_pr='Pressure'
     elif(value=='omega'):
-        data_rho=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
         label_pr='Omega_z'
     elif(value=='vort'):
-        data_rho=pd.read_table(path+'curl.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'curl.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
         #label_pr='Vorticity'
         label_pr=r'Vorticity, $\Omega$ '
         #label_pr='Bernoulli integral -1 /R'
     elif(value=='beta'):
-        data_rho=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
         label_pr=r'$\beta$ '
     elif(value=='mach'):
-        data_rho=pd.read_table(path+'mach.dat', header=None, delimiter=r"\s+", skipfooter=skipf)
+        data_rho=pd.read_table(path+'mach.dat', header=None, delimiter=r"\s+", skipfooter=skipf,skiprows=skiprows)
         label_pr='Mach number'
     elif(value=='c_s'):
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
-        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
         label_pr='Speed of sound'
         data_rho.loc[:,1:]=data_p.loc[:,1:]/data_rho.loc[:,1:]
         data_rho.loc[:,1:]=np.sqrt(1.25*data_rho.loc[:,1:])
     elif(value=='entropy'):
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
-        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
-        data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
+        data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
         label_pr='Entropy'
         data_rho.loc[:,1:]=data_p.loc[:,1:]/(data_rho.loc[:,1:]**  ( (10-3*data_beta.loc[:,1:])/(8-3*data_beta.loc[:,1:]) )   )
 
     elif(value=='vel_abs'):
         print("speed")
         label_pr='Speed'
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
-        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
-        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
-        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+",skiprows=skiprows)
         face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
         maxstep=len(data_rho.loc[:,0])
         n_faces=len(data_rho.loc[0,:])-1
@@ -307,8 +307,8 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
 
 
-projection_plots("mach", path='results/', min=0, max=0,skipstep=5, print_residuals=False, 
-                 log=False, add_streamplot=True, deltaplot=False, reldeltaplot=False)
+projection_plots("beta", path='plots/res26_3/', min=0, max=0,skipstep=1, print_residuals=False, 
+                 log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, skiprows=200)
 
 
 
