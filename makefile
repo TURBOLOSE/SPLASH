@@ -13,7 +13,7 @@ SOURCE_FILES = test.cpp \
 OBJ_FILES = $(SOURCE_FILES:.cpp=.o)
 
 CXX = icpx
-CXXFLAGS = -std=c++23 -O3 -qopenmp -xhost
+CXXFLAGS = -std=c++23 -Ofast -qopenmp -xhost
 LDFLAGS = 
 
 $(NAME): $(OBJ_FILES) $(NAME).o

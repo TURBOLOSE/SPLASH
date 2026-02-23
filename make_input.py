@@ -98,7 +98,7 @@ def make_input_5():
     a=1
     R0=a/3
     #r=a*np.arccos(np.sin(0)*np.sin(theta)+np.cos(theta)*np.cos(0)*np.cos(phi-np.pi*3/2))
-    theta_c=0.3
+    theta_c=0
     phi_c=0.5
     r=a*np.arccos(np.sin(theta_c)*np.sin(theta)+np.cos(theta)*np.cos(theta_c)*np.cos(phi-phi_c))
 
