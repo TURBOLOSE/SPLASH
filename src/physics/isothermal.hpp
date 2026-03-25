@@ -10,7 +10,7 @@ private:
     std::ofstream outfile, outfile_curl, outfile_p, outfile_omega;
 
 public:
-    isothermal(SurfaceMesh mesh, std::vector<std::vector<double>> U_in, int dim, double gam, size_t threads)
+    isothermal(SurfaceMesh mesh, std::vector<std::array<double, 5>> U_in, int dim, double gam, size_t threads)
         : MUSCL_base(mesh, U_in, dim, gam,0,threads)
     {
 
@@ -138,10 +138,9 @@ public:
     const double a = 1;
 
 
-    std::vector<double> flux(std::vector<double> u_in, int n_face, int n_edge)
+    std::array<double, 5> flux(std::array<double, 5> u_in, int n_face, int n_edge)
     {
-        std::vector<double> res;
-        res.resize(dim);
+        std::array<double, 5> res;
         double PI, ndv, L, A, R;
         vector3d<double> R_vec, vel, vel1, vel2, l_vec, nxR, edge_center;
 
@@ -194,11 +193,10 @@ public:
         return res;
     }
 
-     virtual std::vector<double> flux_star(std::vector<double> ul, std::vector<double> ur, int n_face, int n_edge) = 0;
+     virtual std::array<double, 5> flux_star(std::array<double, 5> ul, std::array<double, 5> ur, int n_face, int n_edge) = 0;
 
-      std::vector<double> source(std::vector<double> u, int n_face){
-        std::vector<double>res;
-        res.resize(dim);
+       std::array<double, 5> source(std::vector<double> u, int n_face){
+        std::array<double, 5> res;
         vector3d<double> edge_center, l_vec, vel;
 
         for (size_t i = 0; i < dim; i++)
@@ -208,10 +206,10 @@ public:
     };
 
 
-    std::vector<double> char_vel(std::vector<double> u_L, std::vector<double> u_R, int n_face, int n_edge)
+    std::array<double, 2> char_vel(std::array<double, 5> u_L, std::array<double, 5> u_R, int n_face, int n_edge)
     {
         // returns vector {S_L, S_R}
-        std::vector<double> res;
+        std::array<double, 2> res;
         double a_L, a_R, S_L, S_R, p_L, p_R;
         vector3d<double> vel_r, vec_r, vel_l,  vec_l, edge_center_l, edge_center_r;
 
@@ -252,7 +250,6 @@ public:
         S_L = std::min(dot_product(vel_l, edge_normals[n_face][n_edge]), dot_product(vel_r, edge_normals[n_face][n_edge])) - std::max(a_L, a_R);
         S_R = std::max(dot_product(vel_l, edge_normals[n_face][n_edge]), dot_product(vel_r, edge_normals[n_face][n_edge])) + std::max(a_L, a_R);
 
-        res.resize(2);
         res[0] = S_L;
         res[1] = S_R;
 
@@ -266,14 +263,13 @@ public:
         return dt_new;
     }
 
-    std::vector<double> limiter(std::vector<double> u_r, int n_face, int n_edge)
+    std::array<double, 5> limiter(std::array<double, 5> u_r, int n_face, int n_edge)
     { // classical Superbee limiter for irregular grids
         // CFL independent
         double etha_minus, etha_plus;
         vector3d<double> R_vec, l_vec, vel, vel1, vel2, edge_center;
         double R, c, nu_plus;
-        std::vector<double> res;
-        res.resize(4);
+        std::array<double, 5> res;
 
         int n_edge_1 = n_edge + 1;
         if ((n_edge_1) == faces[n_face].size())

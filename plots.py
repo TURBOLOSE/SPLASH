@@ -58,7 +58,6 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
         data_rho.loc[:,1:]=data_p.loc[:,1:]/(data_rho.loc[:,1:]**  ( (10-3*data_beta.loc[:,1:])/(8-3*data_beta.loc[:,1:]) )   )
 
     elif(value=='vel_abs'):
-        print("speed")
         label_pr='Speed'
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
@@ -75,6 +74,28 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
             L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
             rho0=data_rho.loc[i,1:]
             data_rho.loc[i,1:]=np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0
+    elif(value=='h'):
+        label_pr='Altitude [cm]'
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
+        face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
+        maxstep=len(data_rho.loc[:,0])
+        n_faces=len(data_rho.loc[0,:])-1
+
+        face_centers=np.array(face_centers)/(np.array([np.linalg.norm(np.array(face_centers), axis=1),
+        np.linalg.norm(np.array(face_centers), axis=1),np.linalg.norm(np.array(face_centers), axis=1)]).T)
+
+        for i in range(maxstep):
+            L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
+            rho0=data_rho.loc[i,1:]
+            v=np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0
+            GM=0.217909
+            g_eff=-v**2+GM
+            data_rho.loc[i,1:]=(2*gam-1)/(gam-1)*data_p.loc[i,1:]/(g_eff*rho0)*1e6
+
     else:
         print("wrong type of plot value")
         return
@@ -93,7 +114,7 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
     else:
         if(deltaplot):
             for i in range(1,maxstep):
-                data_rho.loc[i,1:]-=data_rho.loc[i-1,1:]
+                data_rho.loc[i,1:]-=data_rho.loc[0,1:]
             #data_rho.loc[1:maxstep,1:]-=data_rho.loc[0:maxstep-1,1:]
                 #data_rho.loc[i,1:]/=data_rho.loc[0,1:]
             data_rho.loc[0,1:]-=data_rho.loc[0,1:]
@@ -110,7 +131,6 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
         label_pr=label_pr1
 
     
-
 
     if(add_streamplot):
         data_dens=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
@@ -348,7 +368,7 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
 
 
-projection_plots("rho", path='results/', min=0, max=0,skipstep=10,remove_avg_omega=True, print_residuals=False, 
+projection_plots("vel_abs", path='results/', min=0, max=0,skipstep=10,remove_avg_omega=False, print_residuals=False, 
                  log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False)
 
 

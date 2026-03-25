@@ -8,23 +8,21 @@ class MUSCL_HLLC : public adiabatic
 
 
 public:
-    MUSCL_HLLC(SurfaceMesh mesh, std::vector<std::vector<double>> U_in, 
+    MUSCL_HLLC(SurfaceMesh mesh, std::vector<std::array<double, 5>> U_in,
     int dim, double gam, double omega_ns_i, bool accretion_on_i, size_t threads)
         :adiabatic(mesh, U_in, dim, gam, omega_ns_i,accretion_on_i, threads){}
 
 
 protected:
 
-    std::vector<double> flux_star(std::vector<double>& u_L, std::vector<double>& u_R, int n_face, int n_edge)
+    std::array<double, 5>flux_star(std::array<double, 5>& u_L, std::array<double, 5>& u_R, int n_face, int n_edge)
     { // returns vector F* or G*
         // HLLC flux
 
-        std::vector<double> F_L, F_R, F_L_star, F_R_star, c_vel, D, F;
+        std::array<double, 5> F_L, F_R, F_L_star, F_R_star, D, F;
+        std::array<double, 2> c_vel;
         double S_star, p_L, p_R, rho_R, rho_L, v_L, v_R;
         double S_R, S_L, R;
-        F_L_star.resize(dim);
-        F_R_star.resize(dim);
-        D.resize(dim);
 
         vector3d<double> vel_L, vel_R, l_vec, nxR, edge_center;
 

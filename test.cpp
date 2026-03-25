@@ -9,9 +9,9 @@ using namespace pmp;
 int main()
 {
     // SurfaceMesh mesh = uv_sphere(50,50);
-    SurfaceMesh mesh = quad_sphere(6);
+    SurfaceMesh mesh = quad_sphere(5);
     //SurfaceMesh mesh = icosphere(5);
-    //SurfaceMesh mesh = icosphere_hex(5);
+   //SurfaceMesh mesh = icosphere_hex(4);
 
     // MUSCL_base_geometry test(mesh);
 
@@ -23,7 +23,7 @@ int main()
     size_t maxstep = parameters["maxstep"];
     size_t skipstep = parameters["skipstep"];
 
-    size_t dim = parameters["dim"];
+    constexpr size_t dim = 5;
     double gam3d = parameters["gam3d"];
     double gam = 2 - 1 / gam3d;
     double omega_ns = parameters["omega_ns"];
@@ -59,13 +59,8 @@ int main()
     std::ofstream out_lc_90("results/lightcurve90.dat");
     std::ofstream out_lc_180("results/lightcurve180.dat");
 
-    std::vector<std::vector<double>> U_in;
+    std::vector<std::array<double, dim>> U_in;
     U_in.resize(mesh.n_faces());
-
-    for (size_t i = 0; i < mesh.n_faces(); i++)
-    {
-        U_in[i].resize(dim);
-    }
 
     double element;
     std::vector<double> temp;

@@ -18,7 +18,7 @@ protected:
 
 
 public:
-    adiabatic(SurfaceMesh mesh, std::vector<std::vector<double>> U_in,
+    adiabatic(SurfaceMesh mesh, std::vector<std::array<double, 5>> U_in,
               int dim, double gam, double omega_ns_i, bool accretion_on_i, size_t threads)
         : MUSCL_base(mesh, U_in, dim, gam, omega_ns_i, threads), accretion_on(accretion_on_i)
     {
@@ -38,6 +38,11 @@ public:
             stop_check = true;
             exit(1);
         }
+
+        omega0[0] = 0;
+        omega0[1] = 0;
+        omega0[2] = omega_ns;
+
 
         // clean file and append next line
         outfile.open("results/rho.dat", std::ios::out | std::ios::trunc);
@@ -87,8 +92,7 @@ public:
         smooth_acc_on = parameters["smooth_acc_on"];
         t_acc=parameters["t_acc"];
         extra_heat_on = parameters["extra_heat_on"];
-        extra_heat_power=parameters["extra_heat_power"];    
-
+        extra_heat_power=parameters["extra_heat_power"];
 
         area_coeff = 0;
         double mu = M_PI / 2;
@@ -124,10 +128,15 @@ public:
     void write_t_rho()
     {
         outfile << this->time() << "  ";
-        for (const auto& U_i : U)
+        // for (const auto& U_i : U)
+        // {
+        size_t nf=this->n_faces();
+        for (size_t n_face = 0; n_face < nf; n_face++)
         {
 
-            outfile << U_i[0] << " ";
+            // if(U[n_face][0]>14)
+            // std::cout<<n_face<<" density ="<<U[n_face][0]<<"\n";
+            outfile << U[n_face][0] << " ";
             // out_lc<< U_i[0] << " ";
         }
         outfile << "\n";
@@ -387,11 +396,10 @@ public:
 
 protected:
     // U = {rho, l1, l2, l3, E}
-    std::vector<double> flux(std::vector<double>& u_in, int n_face, int n_edge)
+    std::array<double, 5> flux(std::array<double, 5>& u_in, int n_face, int n_edge)
     {
 
-        std::vector<double> res;
-        res.resize(dim);
+        std::array<double, 5> res;
         double PI, ndv, L, A, R;
         vector3d<double> vel, l_vec, nxR, edge_center;
 
@@ -414,6 +422,8 @@ protected:
         vel /= (-u_in[0]) * edge_center.norm();
 
 
+        double theta = std::acos(edge_center[2] / edge_center.norm());
+
         if(vel.norm()>1){
             stop_check=true;
             std::cout<<"superluminal vel in flux calculation: "<<vel.norm()<<"\n";           
@@ -421,23 +431,32 @@ protected:
 
         // PI = (u_in[4] - u_in[0] * vel.norm() * vel.norm() / 2.) * (gam - 1);
         PI = pressure(u_in, vel, edge_center);
+
+        //if(non_inertial_rf_on)
+        //    PI-=u_in[0]*omega_ns * omega_ns * std::sin(theta) * std::sin(theta)/2;
+
         ndv = dot_product(edge_normals[n_face][n_edge], vel);
         nxR = cross_product(edge_normals[n_face][n_edge], (edge_center / edge_center.norm()));
 
-        double theta = std::acos(edge_center[2] / edge_center.norm());
+        // vector3d<double> test;
+        // test[0]=u_in[1] * ndv - nxR[0] * PI;
+        // test[1]=u_in[2] * ndv - nxR[1] * PI;
+        // test[2]=u_in[3] * ndv - nxR[2] * PI;
+        // std::cout<<ndv<<" \n";
 
         res[0] = u_in[0] * dot_product(vel, edge_normals[n_face][n_edge]);
         res[1] = (u_in[1] * ndv - nxR[0] * PI);
         res[2] = (u_in[2] * ndv - nxR[1] * PI);
         res[3] = (u_in[3] * ndv - nxR[2] * PI);
         res[4] = (u_in[4] + PI) * dot_product(vel, edge_normals[n_face][n_edge]);
-
+        
+        
         return res;
     }
 
-    virtual std::vector<double> flux_star(std::vector<double>& ul, std::vector<double>& ur, int n_face, int n_edge) = 0;
+    virtual std::array<double, 5> flux_star(std::array<double, 5>& ul, std::array<double, 5>& ur, int n_face, int n_edge) = 0;
 
-    std::vector<double> source(std::vector<double>& u, int n_face)
+    std::array<double, 5> source(std::array<double, 5>& u, int n_face)
     { // du/dt
       // due to the weird reconstruction algorithm, u[4] here is the pressure \Pi
       // source should still return vector where res[4]=dE/dt
@@ -446,12 +465,13 @@ protected:
         static double en_gain_acc, en_loss_fall, en_loss_fric, en_loss_rad;
         static double total_mass_gain = 0, total_mass_gain_old = 0;
         static double total_mass_loss = 0;
-        std::vector<double> res;
-        res.resize(dim);
-        vector3d<double> l_vec, vel, vel_dot, omega_acc, omxr, rxv, fc_normed, l_fr, wr, vel0, omega0;
+        std::array<double, 5> res;
+        vector3d<double> l_vec, vel, vel_dot, omega_acc, omxr, rxv, fc_normed, l_fr, wr, vel0, omxv, rxomxv, omxomxr, rxomxomxr;
 
         for (size_t i = 0; i < dim; i++)
             res[i] = 0;
+
+
 
         l_vec[0] = u[1];
         l_vec[1] = u[2];
@@ -460,6 +480,23 @@ protected:
         fc_normed = face_centers[n_face] / face_centers[n_face].norm();
         vel = cross_product(fc_normed, l_vec);
         vel /= (-u[0]);
+
+        omxomxr=cross_product(omega0,cross_product(omega0, fc_normed));
+        double dv_cor=dot_product(vel, omxomxr);
+        omxv = cross_product(omega0, vel);
+        
+
+
+        if(non_inertial_rf_on)
+            vel += cross_product(omega0, fc_normed);
+
+        //if(l_vec.norm()>1e-8)
+        //std::cout<<l_vec.norm()<<"\n";
+
+                
+        /*if(non_inertial_rf_on){
+            vel += cross_product(omega0, fc_normed);
+        }*/
 
          if(vel.norm()>1){
             stop_check=true;
@@ -490,30 +527,35 @@ protected:
         double C_switch = beta_switch / (1 - beta_switch);
         double beta, gam_0;
 
-        if (C <= C_switch)
-        {
-            beta = C / (1 + C);
+        if(var_gamma){
+            if (C <= C_switch)
+            {
+                beta = C / (1 + C);
+            }
+            else
+            {
+                beta = 1 - pow(1 / C, 4);
+            }
+
+            double beta_ceil = 1 - 1e-9, beta_floor = 0;
+
+            if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
+                beta = beta_ceil;
+
+            beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
+            beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
+
+            if (beta < beta_floor) // beta limitations
+                beta = beta_floor;
+
+            if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
+                beta = beta_ceil;
+            gam_0 = (10 - 3 * beta) / (8 - 3 * beta);
         }
-        else
-        {
-            beta = 1 - pow(1 / C, 4);
+        else{
+            beta=1;
+            gam_0=gam;
         }
-
-        double beta_ceil = 1 - 1e-9, beta_floor = 0;
-
-        if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
-            beta = beta_ceil;
-
-        beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
-        beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
-
-        if (beta < beta_floor) // beta limitations
-            beta = beta_floor;
-
-        if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
-            beta = beta_ceil;
-        gam_0 = (10 - 3 * beta) / (8 - 3 * beta);
-
         betas[n_face] = beta;
 
         /*double gam_0;
@@ -523,8 +565,24 @@ protected:
         }
         gam_0 = 2 - 1 / gam_0; // 2d ver*/
 
-        double adj_coeff = 1.00045; // just in case of small mass error
 
+        if(non_inertial_rf_on){ //centr + coriolis forces
+
+            /*rxomxomxr=cross_product(fc_normed, omxomxr);
+            res[1] -= u[0]*rxomxomxr[0];
+            res[2] -= u[0]*rxomxomxr[1];
+            res[3] -= u[0]*rxomxomxr[2];*/
+
+            rxomxv = cross_product(fc_normed, omxv);
+            res[1] -= 2*u[0]*rxomxv[0];
+            res[2] -= 2*u[0]*rxomxv[1];
+            res[3] -= 2*u[0]*rxomxv[2];
+
+            //res[4] -= u[0] * dv_cor;
+
+        }
+
+        double adj_coeff = 1.00045; // just in case of small mass error
         if (accretion_on)
         {
             
@@ -537,13 +595,13 @@ protected:
                 else
                 {
 
-                    res[0] = adj_coeff * 1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
+                    res[0] += adj_coeff * 1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
                         std::exp(-(theta_acc - mu) * (theta_acc - mu) / (2 * sigma * sigma));
                 }
             }
             else{
 
-            res[0] = adj_coeff * 1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
+            res[0] += adj_coeff * 1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
                      std::exp(-(theta_acc - mu) * (theta_acc - mu) / (2 * sigma * sigma));
             }
 
@@ -556,10 +614,10 @@ protected:
             omxr = cross_product(omega_acc, fc_normed);
             rxv = cross_product(fc_normed, omxr);
 
-            res[1] = res[0] * rxv[0];
-            res[2] = res[0] * rxv[1];
-            res[3] = res[0] * rxv[2];
-            res[4] = res[0] * (e_acc + ((omxr - vel).norm() * (omxr - vel).norm()) / 2.);
+            res[1] += res[0] * rxv[0];
+            res[2] += res[0] * rxv[1];
+            res[3] += res[0] * rxv[2];
+            res[4] += res[0] * (e_acc + ((omxr - vel).norm() * (omxr - vel).norm()) / 2.);
 
             total_mass_gain += res[0] * surface_area[n_face];
 
@@ -607,9 +665,6 @@ protected:
             double gam3d = 1 / (2 - gam_0);
             double rho = gam3d / (2 * gam3d - 1) * g_eff * u[0] * u[0] / u[4];
 
-            omega0[0] = 0;
-            omega0[1] = 0;
-            omega0[2] = omega_ns;
             vel0 = cross_product(omega0, fc_normed);
 
             wr = (vel - vel0);
@@ -658,6 +713,7 @@ protected:
             double f_r=6e-3/(alpha/1e-4 * u[0])*(1-beta)*pow(vel.norm()/std::sqrt(gam_0*u[4]/u[0]),2);
 
             res[4]-= dmdt * (gam_0 / (gam_0 - 1) * u[4]*(1-f_r) / u[0] + (vel.norm() * vel.norm()) / 2.);
+            
             en_loss_fall+=dt/2.* (dmdt * gam_0 / (gam_0 - 1) * u[4]*(1-f_r)  / u[0]+g_eff*std::sqrt(gam_0*u[4] / u[0])/(3*kappa*(gam_0-1)))* surface_area[n_face];
             en_loss_fall_o=en_loss_fall;
 
@@ -692,12 +748,10 @@ protected:
             //crutch to avoid high mach
         }
 
-
-
         return res;
     };
 
-    double make_beta(std::vector<double> &u, vector3d<double> &r)
+    double make_beta(std::array<double, 5> &u, vector3d<double> &r)
     {
 
         vector3d<double> l_vec, vel, r_normed;
@@ -708,6 +762,12 @@ protected:
         r_normed = r / r.norm();
         vel = cross_product(r_normed, l_vec);
         vel /= (-u[0]);
+
+
+                
+        /*if(non_inertial_rf_on){
+            vel += cross_product(omega0, r_normed);
+        }*/
 
         double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
         double g_eff = GM - vel.norm() * vel.norm();
@@ -749,7 +809,7 @@ protected:
         return beta;
     }
 
-    double make_gam(std::vector<double> &u, vector3d<double> &r)
+    double make_gam(std::array<double, 5> &u, vector3d<double> &r)
     {
 
         if (var_gamma)
@@ -811,7 +871,10 @@ protected:
                
                 double theta_acc = std::acos(fc_normed[1] * std::sin(tilt_angle) + fc_normed[2] * std::cos(tilt_angle));
                 
-               
+                /*if(non_inertial_rf_on){
+                vel += cross_product(omega0, fc_normed);
+                }*/
+                            
 
                 if (accretion_on)
                 {
@@ -909,7 +972,7 @@ protected:
         return dt_new;
     }
 
-    double pressure(std::vector<double> u, vector3d<double> vel, vector3d<double> r)
+    double pressure(std::array<double, 5> u, vector3d<double> vel, vector3d<double> r)
     {
 
         // double gam_0=gam;// older ver
@@ -917,18 +980,30 @@ protected:
         double theta = std::acos(r[2] / r.norm());
         //double pressure_floor = 1e-16;
         double gam_0 = make_gam(u, r);
-
+                
+        /*if(non_inertial_rf_on){
+            vel += cross_product(omega0, r/r.norm());
+        }*/
         // return  (u[4] - u[0] * vel.norm() * vel.norm() / 2) * (gam - 1); //v1 = uncompressed
         // return (u[4] - u[0] * vel.norm() * vel.norm() / 2) * (gam - 1) / gam; // v2 = different P
         // return (u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1) / gam; // v3 = compressed star + sin
         // return std::max(pressure_floor,(u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1)); // v4 = compressed star new gamma
-        return std::max(pressure_floor, (u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1)); // v4 = compressed star new gamma
+
+        // if(non_inertial_rf_on)
+        // {
+        //     return std::max(pressure_floor,(u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1)); // v4 = compressed star new gamma
+        //     //return std::max(pressure_floor,(u[4] - u[0] * (vel.norm() * vel.norm() ) / 2) * (gam - 1)  - gam *omega_ns * omega_ns * std::sin(theta) * std::sin(theta)*u[0]/2);
+        // }
+        // else
+        // {
+            return std::max(pressure_floor, (u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1)); // v4 = compressed star new gamma
+        //}
     }
 
-    std::vector<double> char_vel(std::vector<double> u_L, std::vector<double> u_R, int n_face, int n_edge)
+    std::array<double, 2> char_vel(std::array<double, 5> u_L, std::array<double, 5> u_R, int n_face, int n_edge)
     {
         // returns vector {S_L, S_R}
-        std::vector<double> res;
+        std::array<double, 2> res;
         double a_L, a_R, S_L, S_R, p_L, p_R, q_R, q_L;
         vector3d<double> vel_r, vec_r, vel_l, vec_l, edge_center_l, edge_center_r;
 
@@ -963,6 +1038,12 @@ protected:
 
         p_L = pressure(u_L, vel_l, edge_center_l);
         p_R = pressure(u_R, vel_r, edge_center_r);
+
+
+        // if(non_inertial_rf_on){
+        //     vel_l += cross_product(omega0, edge_center_l);
+        //     vel_r += cross_product(omega0, edge_center_r);
+        // }
 
         double gam_L = gam;
         double gam_R = gam;
@@ -1021,18 +1102,16 @@ protected:
             exit(1);
         }
 
-        res.resize(2);
         res[0] = S_L;
         res[1] = S_R;
 
         return res;
     }
 
-    std::vector<double> limiter(std::vector<double>& u_r, int n_face, int n_edge)
+    std::array<double, 5> limiter(std::array<double, 5>& u_r, int n_face, int n_edge)
     { // here U[4] is also pressure
 
-        std::vector<double> res;
-        res.resize(dim);
+        std::array<double, 5> res;
 
         double a = 4, b = 2, c = 0.1, d = 10, e = 3, f = 6; // switch function parameters
         auto h = [a, b, c, d, e, f](double r)
@@ -1046,8 +1125,8 @@ protected:
             return res;
         };
 
-        std::vector<double> to = limiter_third_order(u_r, n_face, n_edge);
-        std::vector<double> sb = limiter_superbee(u_r, n_face, n_edge);
+        std::array<double, 5> to = limiter_third_order(u_r, n_face, n_edge);
+        std::array<double, 5> sb = limiter_superbee(u_r, n_face, n_edge);
 
         for (size_t i = 0; i < dim; i++)
         {
@@ -1067,13 +1146,12 @@ protected:
         // return res;
     }
 
-    std::vector<double> limiter_third_order(std::vector<double> u_r, int n_face, int n_edge)
+    std::array<double, 5> limiter_third_order(std::array<double, 5> u_r, int n_face, int n_edge)
     { // here U[4] is also pressure
-        std::vector<double> supb = limiter_superbee(u_r, n_face, n_edge);
+        std::array<double, 5> supb = limiter_superbee(u_r, n_face, n_edge);
         vector3d<double> R_vec, l_vec, vel, edge_center;
         double R, c, nu_plus;
-        std::vector<double> res;
-        res.resize(dim);
+        std::array<double, 5> res;
 
         int n_edge_1 = n_edge + 1;
         if ((n_edge_1) == faces[n_face].size())
@@ -1088,10 +1166,6 @@ protected:
         l_vec[2] = U[n_face][3];
 
         vel = cross_product(edge_center, l_vec);
-
-        // tag1
-        // vel /= (-U[n_face][0]) * edge_center.norm();
-
         vel /= (-U[n_face][0] - rho_an[n_face]) * edge_center.norm();
         // double p = pressure(U[n_face], vel, edge_center);
         double p = U[n_face][4] + p_an[n_face];
@@ -1118,15 +1192,14 @@ protected:
         return res;
     }
 
-    std::vector<double> limiter_superbee(std::vector<double> u_r, int n_face, int n_edge)
+    std::array<double, 5> limiter_superbee(std::array<double, 5> u_r, int n_face, int n_edge)
     { // here U[4] is also pressure
         // classical Superbee limiter for irregular grids
         // CFL independent
         double etha_minus, etha_plus;
         vector3d<double> R_vec, l_vec, vel, edge_center;
         double R, c, nu_plus;
-        std::vector<double> res;
-        res.resize(dim);
+        std::array<double, 5> res;
 
         int n_edge_1 = n_edge + 1;
         if ((n_edge_1) == faces[n_face].size())

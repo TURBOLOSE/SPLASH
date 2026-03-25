@@ -8,21 +8,20 @@ class MUSCL_HLLE_p : public adiabatic
 
 
 public:
-    MUSCL_HLLE_p(SurfaceMesh mesh, std::vector<std::vector<double>> U_in, 
+    MUSCL_HLLE_p(SurfaceMesh mesh, std::vector<std::array<double, 5>> U_in, 
     int dim, double gam, double omega_ns_i, bool accretion_on_i, size_t threads)
         :adiabatic(mesh, U_in, dim, gam, omega_ns_i,accretion_on_i, threads){}
 
 
 
 protected:
-    
-    std::vector<double> flux_star(std::vector<double> ul, std::vector<double> ur, int n_face, int n_edge)
+
+    std::array<double, 5> flux_star(std::array<double, 5> ul, std::array<double, 5> ur, int n_face, int n_edge)
     {
 
-        std::vector<double> FL, FR, F, c_vel;
+        std::array<double, 5> FL, FR, F;
+        std::array<double, 2> c_vel;
         double S_R, S_L;
-
-        F.resize(dim);
 
         c_vel = char_vel(ul, ur, n_face, n_edge);
         S_L = c_vel[0];

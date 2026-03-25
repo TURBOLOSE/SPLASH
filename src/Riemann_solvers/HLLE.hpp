@@ -10,15 +10,15 @@ private:
     std::ofstream outfile, outfile_curl, outfile_b;
 
 public:
-    MUSCL_HLLE(SurfaceMesh mesh, std::vector<std::vector<double>> U_in, int dim, double gam, size_t threads)
+    MUSCL_HLLE(SurfaceMesh mesh, std::vector<std::array<double, 5>> U_in, int dim, double gam, size_t threads)
         : isothermal(mesh, U_in, dim, gam, threads){}
 
 
-    std::vector<double> flux_star(std::vector<double> ul, std::vector<double> ur, int n_face, int n_edge)
+    std::array<double, 5> flux_star(std::array<double, 5> ul, std::array<double, 5> ur, int n_face, int n_edge)
     {
 
-        std::vector<double> FL, FR, F, c_vel;
-        F.resize(dim);
+        std::array<double, 5> FL, FR, F;
+        std::array<double, 2> c_vel;
 
         double S_R, S_L;
         

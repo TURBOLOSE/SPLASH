@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from scipy.integrate import odeint
 #import plotly.express as px
 
 
@@ -85,7 +86,7 @@ def make_input_5():
 
     face_centers=np.array(face_centers)
 
-    rho=np.ones(N)
+    rho=np.ones(N)*10
     omega=np.array([0,0,0.1])
     #p=np.ones(N)
     p=1+(np.linalg.norm(omega)**2*rho/2*np.sin(-np.arccos(face_centers[:,2]))**2)
@@ -138,13 +139,125 @@ def make_input_5():
     v=np.array(v)
 
     print('mean_Mach= ',np.mean(np.linalg.norm(v, axis=1)/np.sqrt(gam*p/rho)))
-
+    print('max c_s= ',np.max(gam *p/rho))
 
     E=1/(gam-1)*p+rho*np.linalg.norm(v, axis=1)*np.linalg.norm(v, axis=1)/2
     if(E.any()<0):
         print('Energy<0!!')
 
     pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
+
+def make_input_5_coriolis():
+    gam0=5./3
+    gam=2-1/gam0
+    #face_centers=pd.read_table('results/face_centers_ico_6.dat', header=None, delimiter=r"\s+")
+    face_centers=pd.read_table('results/face_centers.dat', header=None, delimiter=r"\s+")
+    N=len(face_centers[0])
+
+
+    face_centers=np.array(face_centers)
+
+    #rho_0=10
+    #p_0=0.01
+    rho_0=5
+    p_0=1
+    omega=np.array([0,0,0.05])
+
+    a_0=np.sqrt(gam*p_0/rho_0)
+
+    M_0=np.linalg.norm(omega)/a_0
+    print('M_0= ', M_0)
+
+    #M_0=(gam-1)/p_0 *np.linalg.norm(omega)**2
+
+    rho=np.ones(N, dtype='d')*rho_0 
+    p=np.ones(N, dtype='d')*p_0 
+    theta=np.arccos((face_centers[:,2])/np.linalg.norm(face_centers, axis=1)) 
+
+    #p=0.5+(np.linalg.norm(omega)**2*rho/2*np.sin(theta)**2)
+
+
+
+    #rho=rho_0*(1+(gam-1)/2*M_0**2*np.sin(theta, dtype='d')**2)**(1/(gam-1))
+    #p=p_0*(1+(gam-1)/2*M_0**2*np.sin(theta, dtype='d')**2)**(gam/(gam-1))
+
+
+    l=[]
+    v=[]
+
+    
+    lon=-np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1))+np.pi/2 #lat
+    phi=np.arctan2(face_centers[:,1]/np.linalg.norm(face_centers, axis=1),face_centers[:,0]/np.linalg.norm(face_centers, axis=1)) #long
+    a=1
+    R0=a/3
+    
+    #r=a*np.arccos(np.sin(0)*np.sin(lon)+np.cos(lon)*np.cos(0)*np.cos(phi-np.pi*3/2))
+    #theta_c=np.pi/2
+    theta_c=0.3
+    phi_c=0
+    r=a*np.arccos(np.sin(theta_c)*np.sin(lon)+np.cos(lon)*np.cos(theta_c)*np.cos(phi-phi_c))
+
+
+    for face_num, R in enumerate(face_centers):
+
+        #if r[face_num]<R0:
+        #    rho[face_num]*=1.2
+
+        if(theta[face_num]<np.pi/2+0.5+0.3 and theta[face_num]>np.pi/2+0.5-0.3):
+            l.append(rho[face_num]*np.cross(R,np.cross(omega,R))/(np.linalg.norm(R)**2))
+            v.append(np.cross(omega,R)/np.linalg.norm(R))
+        else:
+            l.append(np.array([0,0,0]))
+            v.append(np.array([0,0,0]))
+
+    theta=np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1))
+    #p=1+(np.linalg.norm(omega)**2*rho/2*np.sin(theta)**2)
+
+
+
+    ## build a theta grid for integration
+    # theta_l = np.linspace(0,np.pi,200)
+
+    # # sort theta and rho for safe interpolation
+    # theta_sorted_idx = np.argsort(theta)
+    # theta_sorted = theta[theta_sorted_idx]
+    # rho_sorted = rho[theta_sorted_idx]
+
+    # # define pressure ODE dp/dtheta = ||omega||^2/2 * sin(theta)*cos(theta) * rho(theta)
+    # def press(p, th):
+    #     return np.linalg.norm(omega)**2 /2 * np.sin(th) * np.cos(th) * np.interp(th, theta_sorted, rho_sorted)
+
+    # sol = odeint(press, p_0, theta_l)
+
+    # if sol.ndim == 1:
+    #     p_short = sol
+    # else:
+    #     p_short = sol[:, 0]
+    #p=np.interp(theta, theta_l, p_short)
+
+
+    #p=p_0*(rho/rho_0)**gam
+
+
+
+    #print(p_short)
+    #print(p)
+    l=np.array(l) 
+    v=np.array(v) 
+   #v=np.array(v)
+
+    print('mean_Mach= ',np.mean(np.linalg.norm(v, axis=1)/np.sqrt(gam*p/rho)))
+    print('max c_s= ',np.max(gam *p/rho))
+    if(np.max(gam *p/rho)>1/np.sqrt(3)):
+        print('Warning: c_s is too high!')
+
+    #E=1/(gam-1)*p+rho*np.linalg.norm(v, axis=1)*np.linalg.norm(v, axis=1)/2+rho*np.linalg.norm(omega)**2*(np.sin(theta)**2)/2
+    E=1/(gam-1)*p+rho*np.linalg.norm(v, axis=1)*np.linalg.norm(v, axis=1)/2
+    if(E.any()<0):
+        print('Energy<0!!')
+
+    pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
+
 
 def make_input_5_sp_layer():
 
@@ -226,7 +339,8 @@ def make_input_5_sp_layer():
 
     print('mean_vel= ',np.mean(np.linalg.norm(v, axis=1)))
     print('mean_Mach= ',np.mean(np.linalg.norm(v, axis=1)/np.sqrt(gam*p/rho)))
-    
+    print('max c_s= ',np.max(gam *p/rho))
+
 
     l=np.array(l)
     v=np.array(v)
@@ -454,7 +568,9 @@ def make_input_5_cos_bell():  #adds energy
     l=np.array(l)
     v=np.array(v)
 
-    p=1+(np.linalg.norm(omega)**2*rho/2*np.sin(-np.arccos(face_centers[:,2]))**2)
+
+    theta=np.arccos(face_centers[:,2])
+    p=1+(np.linalg.norm(omega)**2*rho/2*np.sin(theta)**2)
     E=1/(gam-1)*p+rho*np.linalg.norm(v, axis=1)*np.linalg.norm(v, axis=1)/2
 
     pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
@@ -462,7 +578,7 @@ def make_input_5_cos_bell():  #adds energy
 def make_input_5_const_entr():  
 
 
-    gam0=4/3
+    gam0=5/3
     gam=2-1/gam0
     face_centers=pd.read_table('results/face_centers.dat', header=None, delimiter=r"\s+")
     N=len(face_centers[0])
@@ -472,9 +588,9 @@ def make_input_5_const_entr():
     l=[]
     theta=-np.arccos((face_centers[:,2])/np.linalg.norm(face_centers, axis=1)) 
 
-    omega=np.array([0,0,5])
-    rho_0=1
+    rho_0=5
     p_0=1
+    omega=np.array([0,0,0.1])
     a_0=np.sqrt(gam*p_0/rho_0)
 
     M_0=np.linalg.norm(omega)/a_0
@@ -497,6 +613,8 @@ def make_input_5_const_entr():
     l=np.array(l)
     v=np.array(v)
 
+    print('mean_Mach= ',np.mean(np.linalg.norm(v, axis=1)/np.sqrt(gam*p/rho)))
+
     
     E=1/(gam-1)*p+rho*np.linalg.norm(v, axis=1)*np.linalg.norm(v, axis=1)/2
 
@@ -504,7 +622,8 @@ def make_input_5_const_entr():
 
 
 #make_input_5_new_p()
-make_input_5()
+#make_input_5()
+make_input_5_coriolis()
 #make_input_5_const_entr()
 
 #make_input_5_sp_layer()
