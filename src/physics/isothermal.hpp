@@ -10,14 +10,14 @@ private:
     std::ofstream outfile, outfile_curl, outfile_p, outfile_omega;
 
 public:
-    isothermal(SurfaceMesh mesh, std::vector<std::array<double, 5>> U_in, int dim, double gam, size_t threads)
-        : MUSCL_base(mesh, U_in, dim, gam,0,threads)
+    isothermal(SurfaceMesh mesh, std::vector<StateVec> U_in, double gam, size_t threads)
+        : MUSCL_base(mesh, U_in, gam,0,threads)
     {
 
         set_analytical_solution();
-        if (dim != 4)
+        if (DIM != 4)
         {
-            std::cout << "check dim \n";
+            std::cout << "check DIM \n";
             stop_check = true;
         }
 
@@ -138,9 +138,9 @@ public:
     const double a = 1;
 
 
-    std::array<double, 5> flux(std::array<double, 5> u_in, int n_face, int n_edge)
+    StateVec flux(StateVec u_in, int n_face, int n_edge)
     {
-        std::array<double, 5> res;
+        StateVec res;
         double PI, ndv, L, A, R;
         vector3d<double> R_vec, vel, vel1, vel2, l_vec, nxR, edge_center;
 
@@ -193,20 +193,20 @@ public:
         return res;
     }
 
-     virtual std::array<double, 5> flux_star(std::array<double, 5> ul, std::array<double, 5> ur, int n_face, int n_edge) = 0;
+     virtual StateVec flux_star(StateVec ul, StateVec ur, int n_face, int n_edge) = 0;
 
-       std::array<double, 5> source(std::vector<double> u, int n_face){
-        std::array<double, 5> res;
+       StateVec source(std::vector<double> u, int n_face){
+        StateVec res;
         vector3d<double> edge_center, l_vec, vel;
 
-        for (size_t i = 0; i < dim; i++)
+        for (size_t i = 0; i < DIM; i++)
         res[i]=0;
     return res;
 
     };
 
 
-    std::array<double, 2> char_vel(std::array<double, 5> u_L, std::array<double, 5> u_R, int n_face, int n_edge)
+    std::array<double, 2> char_vel(StateVec u_L, StateVec u_R, int n_face, int n_edge)
     {
         // returns vector {S_L, S_R}
         std::array<double, 2> res;
@@ -263,13 +263,13 @@ public:
         return dt_new;
     }
 
-    std::array<double, 5> limiter(std::array<double, 5> u_r, int n_face, int n_edge)
+    StateVec limiter(StateVec u_r, int n_face, int n_edge)
     { // classical Superbee limiter for irregular grids
         // CFL independent
         double etha_minus, etha_plus;
         vector3d<double> R_vec, l_vec, vel, vel1, vel2, edge_center;
         double R, c, nu_plus;
-        std::array<double, 5> res;
+        StateVec res;
 
         int n_edge_1 = n_edge + 1;
         if ((n_edge_1) == faces[n_face].size())
@@ -297,7 +297,7 @@ public:
         etha_plus = H_plus[n_face][n_edge] / BM_dist[n_face][n_edge];
         etha_plus = H_minus[n_face][n_edge] / BM_dist[n_face][n_edge];
 
-        for (size_t i = 0; i < dim; i++)
+        for (size_t i = 0; i < DIM; i++)
         {
             res[i] = std::max(0.,
                               std::max(std::min(1., etha_minus * u_r[i] * 2 / (2 * faces[n_face].size() * nu_plus)),

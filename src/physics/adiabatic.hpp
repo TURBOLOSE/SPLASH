@@ -7,20 +7,19 @@ using json = nlohmann::json;
 
 class adiabatic : public MUSCL_base
 {
-
+//StateVec
 protected:
     std::vector<double> betas;
     std::ofstream outfile, outfile_p, outfile_omega, outfile_curl, outfile_beta, outfile_mach;
-    std::ofstream outfile_l[3];
+    std::ofstream outfile_l[3], outfile_B[3];
     bool accretion_on, friction_on, smooth_acc_on, extra_heat_on;
     double total_mass, acc_rate, e_acc, omega_acc_abs, tilt_angle, acc_width, area_coeff, alpha, t_acc, extra_heat_power;
     double en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o;
 
 
 public:
-    adiabatic(SurfaceMesh mesh, std::vector<std::array<double, 5>> U_in,
-              int dim, double gam, double omega_ns_i, bool accretion_on_i, size_t threads)
-        : MUSCL_base(mesh, U_in, dim, gam, omega_ns_i, threads), accretion_on(accretion_on_i)
+    adiabatic(SurfaceMesh mesh, std::vector<StateVec> U_in, double gam, double omega_ns_i, bool accretion_on_i, size_t threads)
+        : MUSCL_base(mesh, U_in, gam, omega_ns_i, threads), accretion_on(accretion_on_i)
     {
 
         en_gain_acc_o=0; en_loss_fall_o=0; en_loss_fric_o=0; en_loss_rad_o=0;
@@ -32,9 +31,9 @@ public:
         betas.resize(nf);
 
         set_analytical_solution();
-        if (dim != 5)
+        if (DIM != 5 && DIM != 8)
         {
-            std::cout << "check dim \n";
+            std::cout << "check DIM \n";
             stop_check = true;
             exit(1);
         }
@@ -70,6 +69,8 @@ public:
         outfile_mach.open("results/mach.dat", std::ios::out | std::ios::app);
 
         std::string adrs[] = {"results/Lx.dat", "results/Ly.dat", "results/Lz.dat"};
+        std::string adrs_B[] = {"results/Bx.dat", "results/By.dat", "results/Bz.dat"};
+
 
         for (size_t i=0; i < 3; i++)
         {
@@ -77,6 +78,11 @@ public:
             outfile_l[i].open(adrs[i], std::ios::out | std::ios::trunc);
             outfile_l[i].close();
             outfile_l[i].open(adrs[i], std::ios::out | std::ios::app);
+
+
+            outfile_B[i].open(adrs_B[i], std::ios::out | std::ios::trunc);
+            outfile_B[i].close();
+            outfile_B[i].open(adrs_B[i], std::ios::out | std::ios::app);
         }
 
         std::ifstream ifs("input/parameters.json");
@@ -259,6 +265,22 @@ public:
         }
     };
 
+    void write_t_B()
+    {
+        for (size_t i=0; i < 3; i++)
+        {
+
+            outfile_B[i] << this->time() << "  ";
+            for (auto U_j : U)
+            {
+                // outfile_l[i].flush()
+                outfile_B[i] << U_j[i + 5] << " ";
+                // out_lc<< U_i[0] << " ";
+            }
+            outfile_B[i] << "\n";
+        }
+    };
+
     void write_t_omega_z()
     {
         vector3d<double> vel, l_vec, rxV;
@@ -386,7 +408,7 @@ public:
         size_t nf=this->n_faces();
         for (size_t n_face = 0; n_face < nf; n_face++)
         {
-            for (size_t j = 0; j < dim; j++)
+            for (size_t j = 0; j < DIM; j++)
             {
                 out_final << U[n_face][j] << " ";
             }
@@ -396,12 +418,13 @@ public:
 
 protected:
     // U = {rho, l1, l2, l3, E}
-    std::array<double, 5> flux(std::array<double, 5>& u_in, int n_face, int n_edge)
+    StateVec flux(StateVec& u_in, int n_face, int n_edge)
     {
 
-        std::array<double, 5> res;
+        StateVec res;
         double PI, ndv, L, A, R;
-        vector3d<double> vel, l_vec, nxR, edge_center;
+        double mu0=1;
+        vector3d<double> vel, l_vec, nxR, edge_center,B,nxB;
 
         // R = face_centers[n_face].norm();
 
@@ -432,31 +455,49 @@ protected:
         // PI = (u_in[4] - u_in[0] * vel.norm() * vel.norm() / 2.) * (gam - 1);
         PI = pressure(u_in, vel, edge_center);
 
-        //if(non_inertial_rf_on)
-        //    PI-=u_in[0]*omega_ns * omega_ns * std::sin(theta) * std::sin(theta)/2;
+
+        double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+        double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
+        double H = (2*gam-1)/(gam-1)*PI/(u_in[0]*g_eff);
+
+        if(mag_field_on){
+            B[0]=u_in[5]; B[1]=u_in[6]; B[2]=u_in[7];
+            nxB=cross_product(edge_center, B);
+        }
 
         ndv = dot_product(edge_normals[n_face][n_edge], vel);
         nxR = cross_product(edge_normals[n_face][n_edge], (edge_center / edge_center.norm()));
 
-        // vector3d<double> test;
-        // test[0]=u_in[1] * ndv - nxR[0] * PI;
-        // test[1]=u_in[2] * ndv - nxR[1] * PI;
-        // test[2]=u_in[3] * ndv - nxR[2] * PI;
-        // std::cout<<ndv<<" \n";
 
-        res[0] = u_in[0] * dot_product(vel, edge_normals[n_face][n_edge]);
-        res[1] = (u_in[1] * ndv - nxR[0] * PI);
-        res[2] = (u_in[2] * ndv - nxR[1] * PI);
-        res[3] = (u_in[3] * ndv - nxR[2] * PI);
-        res[4] = (u_in[4] + PI) * dot_product(vel, edge_normals[n_face][n_edge]);
-        
-        
+        if(non_inertial_rf_on)
+            PI-=u_in[0]*omega_ns * omega_ns * std::sin(theta) * std::sin(theta)/2;
+
+        res[0] = u_in[0] * ndv;
+
+    
+        if(mag_field_on){
+            res[1]=(u_in[1] * ndv - nxR[0] * (PI)+nxB[0]*B.norm()/H);
+            res[2]=(u_in[2] * ndv - nxR[1] * (PI)+nxB[1]*B.norm()/H);
+            res[3]=(u_in[3] * ndv - nxR[2] * (PI)+nxB[2]*B.norm()/H);
+            res[4] = (u_in[4] + PI) * ndv
+            - dot_product(B, vel)*dot_product(B, edge_normals[n_face][n_edge])/mu0/H;
+
+            res[5]=(vel[1]*B[0]-B[1]*vel[0])*edge_normals[n_face][n_edge][1]/H+(vel[2]*B[0]-B[2]*vel[0])*edge_normals[n_face][n_edge][2]/H;
+            res[6]=(vel[0]*B[1]-B[0]*vel[1])*edge_normals[n_face][n_edge][0]/H+(vel[2]*B[1]-B[2]*vel[1])*edge_normals[n_face][n_edge][2]/H;
+            res[7]=(vel[0]*B[2]-B[0]*vel[0])*edge_normals[n_face][n_edge][0]/H+(vel[1]*B[2]-B[1]*vel[0])*edge_normals[n_face][n_edge][1]/H;
+        }else{
+            res[1] = (u_in[1] * ndv - nxR[0] * PI);
+            res[2] = (u_in[2] * ndv - nxR[1] * PI);
+            res[3] = (u_in[3] * ndv - nxR[2] * PI);
+            res[4] = (u_in[4] + PI) * ndv;
+        }
+
         return res;
     }
 
-    virtual std::array<double, 5> flux_star(std::array<double, 5>& ul, std::array<double, 5>& ur, int n_face, int n_edge) = 0;
+    virtual StateVec flux_star(StateVec& ul, StateVec& ur, int n_face, int n_edge) = 0;
 
-    std::array<double, 5> source(std::array<double, 5>& u, int n_face)
+    StateVec source(StateVec& u, int n_face)
     { // du/dt
       // due to the weird reconstruction algorithm, u[4] here is the pressure \Pi
       // source should still return vector where res[4]=dE/dt
@@ -465,10 +506,10 @@ protected:
         static double en_gain_acc, en_loss_fall, en_loss_fric, en_loss_rad;
         static double total_mass_gain = 0, total_mass_gain_old = 0;
         static double total_mass_loss = 0;
-        std::array<double, 5> res;
+        StateVec res;
         vector3d<double> l_vec, vel, vel_dot, omega_acc, omxr, rxv, fc_normed, l_fr, wr, vel0, omxv, rxomxv, omxomxr, rxomxomxr;
 
-        for (size_t i = 0; i < dim; i++)
+        for (size_t i = 0; i < DIM; i++)
             res[i] = 0;
 
 
@@ -751,7 +792,7 @@ protected:
         return res;
     };
 
-    double make_beta(std::array<double, 5> &u, vector3d<double> &r)
+    double make_beta(StateVec &u, vector3d<double> &r)
     {
 
         vector3d<double> l_vec, vel, r_normed;
@@ -809,7 +850,7 @@ protected:
         return beta;
     }
 
-    double make_gam(std::array<double, 5> &u, vector3d<double> &r)
+    double make_gam(StateVec &u, vector3d<double> &r)
     {
 
         if (var_gamma)
@@ -972,7 +1013,7 @@ protected:
         return dt_new;
     }
 
-    double pressure(std::array<double, 5> u, vector3d<double> vel, vector3d<double> r)
+    double pressure(StateVec u, vector3d<double> vel, vector3d<double> r)
     {
 
         // double gam_0=gam;// older ver
@@ -996,11 +1037,21 @@ protected:
         // }
         // else
         // {
-            return std::max(pressure_floor, (u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1)); // v4 = compressed star new gamma
+
+        double res=(u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1);
+
+        if(mag_field_on){
+            vector3d<double> B;
+            B[0]=u[5]; B[1]=u[6]; B[2]=u[7];
+
+            res -= B.norm()*B.norm()/2*(gam_0 - 1);
+        }
+
+            return std::max(pressure_floor, res); // v4 = compressed star new gamma
         //}
     }
 
-    std::array<double, 2> char_vel(std::array<double, 5> u_L, std::array<double, 5> u_R, int n_face, int n_edge)
+    std::array<double, 2> char_vel(StateVec u_L, StateVec u_R, int n_face, int n_edge)
     {
         // returns vector {S_L, S_R}
         std::array<double, 2> res;
@@ -1057,9 +1108,36 @@ protected:
             z = ((gam_L + gam_R) / 2. - 1) / (2 * (gam_L + gam_R) / 2.);
         }
 
+
+        if(mag_field_on){
+        vector3d<double> B_L, B_R;
+        B_L[0] = u_L[5]; B_L[1] = u_L[2]; B_L[2] = u_L[7];
+        B_R[0] = u_R[5]; B_R[1] = u_R[6]; B_R[2] = u_R[7];
+
+        double B_n_L = dot_product(B_L, edge_normals[n_face][n_edge]);
+        double B_n_R = dot_product(B_R, edge_normals[n_face][n_edge]);
+        double B_mag_L = B_L.norm();
+        double B_mag_R = B_R.norm();
+
+        double mu0 = 1.0;  // Check units in your system
+
+        double a2_L = gam_L * p_L / u_L[0];
+        double c_A2_L = B_mag_L * B_mag_L / u_L[0];
+        double c_fast_L = std::sqrt(0.5 * (a2_L + c_A2_L + 
+                    std::sqrt((a2_L + c_A2_L)*(a2_L + c_A2_L) - 4*a2_L*B_n_L*B_n_L/u_L[0])));
+
+        double a2_R = gam_R * p_R / u_R[0];
+        double c_A2_R = B_mag_R * B_mag_R / u_R[0];
+        double c_fast_R = std::sqrt(0.5 * (a2_R + c_A2_R + 
+                    std::sqrt((a2_R + c_A2_R)*(a2_R + c_A2_R) - 4*a2_R*B_n_R*B_n_R/u_R[0])));
+
+        a_L = c_fast_L;
+        a_R = c_fast_R;
+        }else
+        {
         a_L = std::sqrt(gam_L * p_L / u_L[0]);
         a_R = std::sqrt(gam_R * p_R / u_R[0]);
-
+        }
         // double p_star=std::pow((a_L+a_R-(gam-1)/2. * (dot_product(edge_normals[n_face][n_edge], vel_r)-dot_product(edge_normals[n_face][n_edge], vel_l)))
         //  /( a_L/std::pow(p_L,z) + a_R/std::pow(p_R,z) ),1./z);
 
@@ -1108,10 +1186,10 @@ protected:
         return res;
     }
 
-    std::array<double, 5> limiter(std::array<double, 5>& u_r, int n_face, int n_edge)
+    StateVec limiter(StateVec& u_r, int n_face, int n_edge)
     { // here U[4] is also pressure
 
-        std::array<double, 5> res;
+        StateVec res;
 
         double a = 4, b = 2, c = 0.1, d = 10, e = 3, f = 6; // switch function parameters
         auto h = [a, b, c, d, e, f](double r)
@@ -1125,10 +1203,10 @@ protected:
             return res;
         };
 
-        std::array<double, 5> to = limiter_third_order(u_r, n_face, n_edge);
-        std::array<double, 5> sb = limiter_superbee(u_r, n_face, n_edge);
+        StateVec to = limiter_third_order(u_r, n_face, n_edge);
+        StateVec sb = limiter_superbee(u_r, n_face, n_edge);
 
-        for (size_t i = 0; i < dim; i++)
+        for (size_t i = 0; i < DIM; i++)
         {
             res[i] = ((1 - h(u_r[i])) * to[i] + h(u_r[i]) * sb[i]);
             // res[i] = ((1 - h(u_r[0])) * to[0] + h(u_r[0]) * sb[0]);
@@ -1146,12 +1224,12 @@ protected:
         // return res;
     }
 
-    std::array<double, 5> limiter_third_order(std::array<double, 5> u_r, int n_face, int n_edge)
+    StateVec limiter_third_order(StateVec u_r, int n_face, int n_edge)
     { // here U[4] is also pressure
-        std::array<double, 5> supb = limiter_superbee(u_r, n_face, n_edge);
+        StateVec supb = limiter_superbee(u_r, n_face, n_edge);
         vector3d<double> R_vec, l_vec, vel, edge_center;
         double R, c, nu_plus;
-        std::array<double, 5> res;
+        StateVec res;
 
         int n_edge_1 = n_edge + 1;
         if ((n_edge_1) == faces[n_face].size())
@@ -1178,7 +1256,7 @@ protected:
         nu_plus = (c + dot_product(vel, edge_normals[n_face][n_edge])) * dt *
                   (distance(vertices[faces[n_face][n_edge]], vertices[faces[n_face][n_edge_1]]) / surface_area[n_face]);
 
-        for (size_t i = 0; i < dim; i++)
+        for (size_t i = 0; i < DIM; i++)
         {
 
             res[i] = std::max(0., std::min(supb[i], 1 + (1 + nu_plus) / 3 * (u_r[i] - 1)));
@@ -1192,14 +1270,14 @@ protected:
         return res;
     }
 
-    std::array<double, 5> limiter_superbee(std::array<double, 5> u_r, int n_face, int n_edge)
+    StateVec limiter_superbee(StateVec u_r, int n_face, int n_edge)
     { // here U[4] is also pressure
         // classical Superbee limiter for irregular grids
         // CFL independent
         double etha_minus, etha_plus;
         vector3d<double> R_vec, l_vec, vel, edge_center;
         double R, c, nu_plus;
-        std::array<double, 5> res;
+        StateVec res;
 
         int n_edge_1 = n_edge + 1;
         if ((n_edge_1) == faces[n_face].size())
@@ -1232,7 +1310,7 @@ protected:
         etha_plus = H_plus[n_face][n_edge] / BM_dist[n_face][n_edge];
         etha_minus = H_minus[n_face][n_edge] / BM_dist[n_face][n_edge];
 
-        for (size_t i = 0; i < dim; i++)
+        for (size_t i = 0; i < DIM; i++)
         {
 
             res[i] = std::max(0.,

@@ -2,7 +2,9 @@
 #include "src/Riemann_solvers/HLLE.hpp"
 #include "src/Riemann_solvers/HLLE_p.hpp"
 #include "src/Riemann_solvers/HLLC.hpp"
+#include "src/Riemann_solvers/HLLD.hpp"
 #include "src/Riemann_solvers/HLLCplus.hpp"
+
 
 using namespace pmp;
 
@@ -11,7 +13,7 @@ int main()
     // SurfaceMesh mesh = uv_sphere(50,50);
     SurfaceMesh mesh = quad_sphere(5);
     //SurfaceMesh mesh = icosphere(5);
-   //SurfaceMesh mesh = icosphere_hex(4);
+    //SurfaceMesh mesh = icosphere_hex(4);
 
     // MUSCL_base_geometry test(mesh);
 
@@ -23,7 +25,7 @@ int main()
     size_t maxstep = parameters["maxstep"];
     size_t skipstep = parameters["skipstep"];
 
-    constexpr size_t dim = 5;
+    //constexpr size_t DIM = 5;
     double gam3d = parameters["gam3d"];
     double gam = 2 - 1 / gam3d;
     double omega_ns = parameters["omega_ns"];
@@ -59,7 +61,7 @@ int main()
     std::ofstream out_lc_90("results/lightcurve90.dat");
     std::ofstream out_lc_180("results/lightcurve180.dat");
 
-    std::vector<std::array<double, dim>> U_in;
+    std::vector<std::array<double, DIM>> U_in;
     U_in.resize(mesh.n_faces());
 
     double element;
@@ -72,9 +74,9 @@ int main()
         elements_read++;
     }
 
-    if (elements_read < mesh.n_faces() * dim)
+    if (elements_read < mesh.n_faces() * DIM)
     {
-        for (size_t i = elements_read; i < mesh.n_faces() * dim; i++)
+        for (size_t i = elements_read; i < mesh.n_faces() * DIM; i++)
         {
             temp.push_back(1);
         }
@@ -85,16 +87,18 @@ int main()
 
     for (size_t i = 0; i < mesh.n_faces(); i++)
     {
-        for (size_t j = 0; j < dim; j++)
+        for (size_t j = 0; j < DIM; j++)
         {
-            U_in[i][j] = temp[i * dim + j];
+            U_in[i][j] = temp[i * DIM + j];
         }
     }
 
-    // MUSCL_HLLE test2(mesh, U_in, dim, gam, threads);
-    // MUSCL_HLLE_p test2(mesh, U_in, dim, gam,omega_ns, threads);
-    MUSCL_HLLC test2(mesh, U_in, dim, gam, omega_ns,accretion_on, threads);
-    //MUSCL_HLLCplus test2(mesh, U_in, dim, gam, omega_ns, accretion_on, threads);
+    // MUSCL_HLLE test2(mesh, U_in, DIM, gam, threads);
+    // MUSCL_HLLE_p test2(mesh, U_in, DIM, gam,omega_ns, threads);
+    MUSCL_HLLC test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
+    //MUSCL_HLLCplus test2(mesh, U_in, DIM, gam, omega_ns, accretion_on, threads);
+   //MUSCL_HLLD test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
+
 
     test2.set_time(t_0);
 
@@ -109,6 +113,10 @@ int main()
     test2.write_t_omega_z();
     test2.write_t_L();
     test2.write_t_mach();
+
+    if(test2.get_m_field_on()){
+        test2.write_t_B();
+    }
 
 
 
@@ -168,6 +176,10 @@ int main()
             test2.write_t_L();
             test2.write_t_betas();
             test2.write_t_mach();
+
+            if(test2.get_m_field_on()){
+                test2.write_t_B();
+            }
             // test2.write_t_tracer();
         }
 
@@ -181,6 +193,9 @@ int main()
             test2.write_t_L();
             test2.write_t_betas();
             test2.write_t_mach();
+            if(test2.get_m_field_on()){
+                test2.write_t_B();
+            }
             break;
         }
 

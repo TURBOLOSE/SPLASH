@@ -8,18 +8,17 @@ class MUSCL_HLLC : public adiabatic
 
 
 public:
-    MUSCL_HLLC(SurfaceMesh mesh, std::vector<std::array<double, 5>> U_in,
-    int dim, double gam, double omega_ns_i, bool accretion_on_i, size_t threads)
-        :adiabatic(mesh, U_in, dim, gam, omega_ns_i,accretion_on_i, threads){}
+    MUSCL_HLLC(SurfaceMesh mesh, std::vector<StateVec> U_in, double gam, double omega_ns_i, bool accretion_on_i, size_t threads)
+        :adiabatic(mesh, U_in, gam, omega_ns_i,accretion_on_i, threads){}
 
 
 protected:
 
-    std::array<double, 5>flux_star(std::array<double, 5>& u_L, std::array<double, 5>& u_R, int n_face, int n_edge)
+    StateVec flux_star(StateVec& u_L, StateVec& u_R, int n_face, int n_edge)
     { // returns vector F* or G*
         // HLLC flux
 
-        std::array<double, 5> F_L, F_R, F_L_star, F_R_star, D, F;
+        StateVec F_L, F_R, F_L_star, F_R_star, D, F;
         std::array<double, 2> c_vel;
         double S_star, p_L, p_R, rho_R, rho_L, v_L, v_R;
         double S_R, S_L, R;
@@ -87,7 +86,7 @@ protected:
 
         double P_LR = (p_L + p_R + u_L[0] * (S_L - dot_product(edge_normals[n_face][n_edge], vel_L)) * (S_star - dot_product(edge_normals[n_face][n_edge], vel_L)) + u_R[0] * (S_R - dot_product(edge_normals[n_face][n_edge], vel_R)) * (S_star - dot_product(edge_normals[n_face][n_edge], vel_R))) / 2;
 
-        for (size_t i = 0; i < dim; i++)
+        for (size_t i = 0; i < DIM; i++)
         {
             F_L_star[i] = (S_star * (S_L * u_L[i] - F_L[i]) + S_L * P_LR * D[i]) / (S_L - S_star);
             F_R_star[i] = (S_star * (S_R * u_R[i] - F_R[i]) + S_R * P_LR * D[i]) / (S_R - S_star);
@@ -124,10 +123,10 @@ protected:
     // { // du/dt
 
     //     std::vector<double> res;
-    //     res.resize(dim);
+    //     res.resize(DIM);
     //     vector3d<double> edge_center, l_vec, vel, RxV;
 
-    //     for (size_t i = 0; i < dim; i++)
+    //     for (size_t i = 0; i < DIM; i++)
     //         res[i] = 0;
 
     //     l_vec[0] = u[1];

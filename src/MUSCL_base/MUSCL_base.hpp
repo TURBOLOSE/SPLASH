@@ -5,16 +5,21 @@
 #include <omp.h>
 #include <array>
 
+//constexpr size_t DIM = 8;
+constexpr size_t DIM = 5;
+using StateVec = std::array<double, DIM>;
+
+
 class MUSCL_base : public MUSCL_base_geometry
 {
 protected:
-    std::vector<std::array<double, 5>> U, U_temp, U_temp_1, source_plus;
+    std::vector<StateVec> U, U_temp, U_temp_1, source_plus;
     std::vector<double> rho_an, p_an;
-    std::vector<std::vector<std::array<double, 5>>> flux_var_plus, flux_var_minus, U_plus, U_minus;
+    std::vector<std::vector<StateVec>> flux_var_plus, flux_var_minus, U_plus, U_minus;
     // flux_var^plus_ij flux_var^minus_ij, U_ij (short), U_ji(short)
     double dt, gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, density_floor, pressure_floor, CFL;
-    int dim, implicit_iternum;
-    bool var_gamma, implicit_solve_on, non_inertial_rf_on;
+    int implicit_iternum;
+    bool var_gamma, implicit_solve_on, non_inertial_rf_on, mag_field_on;
     size_t steps, threads;
     double omega_ns;
     bool stop_check = false;
@@ -22,8 +27,8 @@ protected:
 
 
 public:
-    MUSCL_base(SurfaceMesh mesh, std::vector<std::array<double, 5>> U_in, int dim, double gam, double omega_ns_i, size_t threads_i) : MUSCL_base_geometry(mesh), U(U_in), gam(gam), dim(dim), omega_ns(omega_ns_i), threads(threads_i)
-    { // U_in should be n_faces * dim(=4)
+    MUSCL_base(SurfaceMesh mesh, std::vector<StateVec> U_in, double gam, double omega_ns_i, size_t threads_i) : MUSCL_base_geometry(mesh), U(U_in), gam(gam), omega_ns(omega_ns_i), threads(threads_i)
+    { // U_in should be n_faces * DIM(=4)
 
         double h0_temp;
 
@@ -53,16 +58,16 @@ public:
             flux_var_minus[i].resize(faces[i].size());
             U_plus[i].resize(faces[i].size());
             U_minus[i].resize(faces[i].size());
-            // U_temp[i].resize(dim);
-            // U_temp_1[i].resize(dim);
-            // source_plus[i].resize(dim);
+            // U_temp[i].resize(DIM);
+            // U_temp_1[i].resize(DIM);
+            // source_plus[i].resize(DIM);
 
             // for (size_t j = 0; j < faces[i].size(); j++)
             // {
-            //     flux_var_plus[i][j].resize(dim);
-            //     flux_var_minus[i][j].resize(dim);
-            //     U_plus[i][j].resize(dim);
-            //     U_minus[i][j].resize(dim);
+            //     flux_var_plus[i][j].resize(DIM);
+            //     flux_var_minus[i][j].resize(DIM);
+            //     U_plus[i][j].resize(DIM);
+            //     U_minus[i][j].resize(DIM);
             // }
         }
 
@@ -74,6 +79,13 @@ public:
         implicit_iternum = parameters["implicit_iternum"];
         implicit_solve_on = parameters["implicit_solve_on"];
         non_inertial_rf_on = parameters["non_inertial_rf_on"];
+        mag_field_on = parameters["magnetic_field_on"];
+
+        if(mag_field_on && DIM!=8){
+            std::cout<<"magnetic field on but DIM is not 8, check parameters.json \n";
+            stop_check=true;
+            exit(1);
+        }
 
         
         omega0[0] = 0;
@@ -187,7 +199,7 @@ public:
             for (size_t i = 0; i < this->n_faces(); i++)
                 {
 
-                    for (size_t k = 0; k < dim; k++)
+                    for (size_t k = 0; k < DIM; k++)
                     {
                         U[i][k] = U_temp[i][k]+U[i][k]/2+U_temp_1[i][k];
                     }
@@ -203,7 +215,7 @@ public:
             for (size_t i = 0; i < nf; i++)
             {
 
-                for (size_t k = 0; k < dim; k++)
+                for (size_t k = 0; k < DIM; k++)
                 {
                     U_temp_1[i][k]=2*U[i][k];
                     U[i][k] += U_temp[i][k];
@@ -220,7 +232,7 @@ public:
             for (size_t i = 0; i < nf; i++)
             {
 
-                for (size_t k = 0; k < dim; k++)
+                for (size_t k = 0; k < DIM; k++)
                 {
                     U[i][k] += U_temp[i][k];
                 }
@@ -240,7 +252,7 @@ public:
                 for (size_t i = 0; i < nf; i++)
                 {
 
-                    for (size_t k = 0; k < dim; k++)
+                    for (size_t k = 0; k < DIM; k++)
                     {   
 
                         temp0+=U[i][k];
@@ -269,7 +281,7 @@ public:
             for (size_t i = 0; i < nf; i++)
             {
 
-                for (size_t k = 0; k < dim; k++)
+                for (size_t k = 0; k < DIM; k++)
                 {
                     U[i][k] += U_temp[i][k];
                 }
@@ -285,7 +297,7 @@ public:
             for (size_t i = 0; i < nf; i++)
             {
 
-                for (size_t k = 0; k < dim; k++)
+                for (size_t k = 0; k < DIM; k++)
                 {
                     U[i][k] += U_temp[i][k];
                 }
@@ -305,7 +317,7 @@ public:
         for (size_t i = 0; i < nf; i++)
         {
 
-            // for (size_t k = 0; k < dim; k++)
+            // for (size_t k = 0; k < DIM; k++)
             //{
             //     U[i][k] += U_temp[i][k]; // U=U+dt*phi(U+dt/2*phi(U))
             // }
@@ -351,6 +363,11 @@ public:
         return stop_check;
     }
 
+        bool get_m_field_on()
+    { // True = stop computations due to error
+        return mag_field_on;
+    }
+
 protected:
     void res2d(double dt_here) // space step
     // takes data from U matrix
@@ -362,7 +379,7 @@ protected:
         size_t nf=this->n_faces();
         for (size_t i = 0; i < nf; i++)
         {
-            for (size_t k = 0; k < dim; k++) // source terms
+            for (size_t k = 0; k < DIM; k++) // source terms
                 U[i][k] = dt_here * source_plus[i][k];
 
             // int comp=3;
@@ -376,7 +393,7 @@ protected:
                 if (j == (faces[i].size() - 1))
                     j1 = 0;
 
-                for (size_t k = 0; k < dim; k++)
+                for (size_t k = 0; k < DIM; k++)
                 {
                     if (std::isnan((flux_var_minus[i][j][k])))
                     {
@@ -394,10 +411,10 @@ protected:
         }
     };
 
-    virtual std::array<double, 5> flux_star(std::array<double, 5>& ul, std::array<double, 5>& ur, int n_face, int n_edge) = 0;
-    virtual std::array<double, 5> limiter(std::array<double, 5>& u_r, int n_face, int n_edge) = 0;
-    virtual std::array<double, 5> source(std::array<double, 5>& u, int n_face) = 0;
-    virtual double make_gam(std::array<double, 5> &u, vector3d<double> &r) = 0;
+    virtual StateVec flux_star(StateVec& ul, StateVec& ur, int n_face, int n_edge) = 0;
+    virtual StateVec limiter(StateVec& u_r, int n_face, int n_edge) = 0;
+    virtual StateVec source(StateVec& u, int n_face) = 0;
+    virtual double make_gam(StateVec &u, vector3d<double> &r) = 0;
     virtual double extra_dt_constr() = 0;
     // virtual void set_analytical_solution();
 
@@ -413,7 +430,7 @@ private:
         {
             for (size_t j = 0; j < faces[i].size(); j++)
             {
-                for (size_t k = 0; k < dim; k++)
+                for (size_t k = 0; k < DIM; k++)
                 {
                     f1 = flux_var_plus[i][j][k] / (U_plus[i][j][k] - U[i][k]);
                     f2 = -flux_var_minus[i][j][k] / (U_minus[i][j][k] - U[i][k]);
@@ -500,7 +517,19 @@ private:
                 gam_0 = (10 - 3 * beta) / (8 - 3 * beta);
             }
 
+            if(mag_field_on){
+            vector3d<double> B;
+            B[0] = U[i][5]; B[1] = U[i][2]; B[2] = U[i][7];
+
+            double B_mag = B.norm();
+
+            c_s=std::max(std::sqrt(gam_0 * p / rho), std::sqrt(B_mag * B_mag / (4*M_PI*rho)));
+
+            }else
+            {
             c_s = std::sqrt(gam_0 * p / rho);
+
+            }
 
             if (vel.norm() > max)
             {
@@ -568,12 +597,12 @@ private:
                 int neighboor_num = neighbors_edge[i][j];
                 int j0 = std::find(neighbors_edge[neighboor_num].begin(), neighbors_edge[neighboor_num].end(), i) - neighbors_edge[neighboor_num].begin();
 
-                std::array<double, 5> pp = p_plus(i, j);
-                std::array<double, 5> pm = p_minus(i, j);
-                std::array<double, 5> r;
-                //r.resize(dim);
+                StateVec pp = p_plus(i, j);
+                StateVec pm = p_minus(i, j);
+                StateVec r;
+                //r.resize(DIM);
 
-                for (size_t k = 0; k < dim; k++)
+                for (size_t k = 0; k < DIM; k++)
                 {
                     r[k] = pm[k] / pp[k];
 
@@ -581,8 +610,8 @@ private:
                     //     r[k]=0;
                 }
 
-                std::array<double, 5> lim = limiter(r, i, j);
-                for (size_t k = 0; k < dim; k++)
+                StateVec lim = limiter(r, i, j);
+                for (size_t k = 0; k < DIM; k++)
                 {
                     /*double kappa = (2 * lim[k] - (r[k] + 1)) / (r[k] + 1);
                     if (std::isnan(kappa))
@@ -613,12 +642,12 @@ private:
         }
     };
 
-    std::array<double, 5> U_H_plus(int n_face, int face_edge)
+    StateVec U_H_plus(int n_face, int face_edge)
     {
 
-        std::array<double, 5> res;
+        StateVec res;
 
-        for (size_t U_element = 0; U_element < dim; U_element++)
+        for (size_t U_element = 0; U_element < DIM; U_element++)
         {
             res[U_element] = betas_plus[n_face][face_edge][0] * U[flux_faces_plus[n_face][face_edge][0]][U_element] +
                              betas_plus[n_face][face_edge][1] * U[flux_faces_plus[n_face][face_edge][1]][U_element];
@@ -627,11 +656,11 @@ private:
         return res;
     };
 
-    std::array<double, 5> U_H_minus(int n_face, int face_edge)
+    StateVec U_H_minus(int n_face, int face_edge)
     {
-        std::array<double, 5> res;
+        StateVec res;
 
-        for (size_t U_element = 0; U_element < dim; U_element++)
+        for (size_t U_element = 0; U_element < DIM; U_element++)
         {
             res[U_element] = betas_minus[n_face][face_edge][0] * U[flux_faces_minus[n_face][face_edge][0]][U_element] +
                              betas_minus[n_face][face_edge][1] * U[flux_faces_minus[n_face][face_edge][1]][U_element];
@@ -640,11 +669,11 @@ private:
         return res;
     };
 
-    std::array<double, 5> p_plus(int n_face, int face_edge)
+    StateVec p_plus(int n_face, int face_edge)
     {
-        std::array<double, 5> res, Up;
+        StateVec res, Up;
         Up = U_H_plus(n_face, face_edge);
-        for (size_t U_element = 0; U_element < dim; U_element++)
+        for (size_t U_element = 0; U_element < DIM; U_element++)
         {
             if (U_element == 0)
             {
@@ -664,11 +693,11 @@ private:
         return res;
     };
 
-    std::array<double, 5> p_minus(int n_face, int face_edge)
+    StateVec p_minus(int n_face, int face_edge)
     {
-        std::array<double, 5> res1, Um;
+        StateVec res1, Um;
         Um = U_H_minus(n_face, face_edge);
-        for (size_t U_element = 0; U_element < dim; U_element++)
+        for (size_t U_element = 0; U_element < DIM; U_element++)
         {
             if (U_element == 0)
             {
@@ -688,7 +717,7 @@ private:
         return res1;
     }
 
-    double pressure_fc(std::array<double, 5> &u, int n_face) // u[4] == energy
+    double pressure_fc(StateVec &u, int n_face) // u[4] == energy
     {                                                      // to do: make state_vector a class and turn this into a method
         vector3d<double> l_vec, vel, r;
         // double pressure_floor = 1e-16;
@@ -765,11 +794,21 @@ private:
             //return std::max(pressure_floor,(u[4] - u[0] * (vel.norm() * vel.norm() ) / 2) * (gam - 1)  - gam *omega_ns * omega_ns * std::sin(theta) * std::sin(theta)*u[0]/2);
        //}
         //else{
-        return std::max(pressure_floor, (u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1)); // v4
-        //}
+
+        double res=(u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1);
+
+        if(mag_field_on){
+            vector3d<double> B;
+            B[0]=u[5]; B[1]=u[6]; B[2]=u[7];
+
+            res -= B.norm()*B.norm()/2*(gam_0 - 1);
+        }
+
+
+        return std::max(pressure_floor, res); 
     }
 
-    double E_edge(std::array<double, 5> &u, int n_face, int n_edge) // u[4] == pressure
+    double E_edge(StateVec &u, int n_face, int n_edge) // u[4] == pressure
     {                                                             // because we reconstruct pressure on edge we needed new formula for beta
         vector3d<double> l_vec, vel, r;
 
@@ -838,7 +877,15 @@ private:
         //return 1 / (gam_0 - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2 +omega_ns * omega_ns * std::sin(theta) * std::sin(theta)*u[0]/2;
         //}
         //else{
-        return 1 / (gam_0 - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2;
+
+        double res=1 / (gam_0 - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2;
+        if(mag_field_on){
+        vector3d<double> B;
+        B[0]=u[5]; B[1]=u[6]; B[2]=u[7];
+        res+=B.norm()*B.norm()/2;
+        }
+
+        return res;
         //}
     }
 };

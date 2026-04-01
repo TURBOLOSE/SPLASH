@@ -56,7 +56,22 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
         data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
         label_pr='Entropy'
         data_rho.loc[:,1:]=data_p.loc[:,1:]/(data_rho.loc[:,1:]**  ( (10-3*data_beta.loc[:,1:])/(8-3*data_beta.loc[:,1:]) )   )
+    elif(value=='B'):
+        label_pr='B'
+        data_Bx=pd.read_table(path+'Bx.dat', header=None, delimiter=r"\s+")
+        data_By=pd.read_table(path+'By.dat', header=None, delimiter=r"\s+")
+        data_Bz=pd.read_table(path+'Bz.dat', header=None, delimiter=r"\s+")
+        data_rho=data_Bx
+        face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
+        maxstep=len(data_rho.loc[:,0])
 
+        face_centers=np.array(face_centers)/(np.array([np.linalg.norm(np.array(face_centers), axis=1),
+        np.linalg.norm(np.array(face_centers), axis=1),np.linalg.norm(np.array(face_centers), axis=1)]).T)
+
+        for i in range(maxstep):
+            B=np.array([data_Bx.loc[i,1:],data_By.loc[i,1:],data_Bz.loc[i,1:]]).T 
+            rho0=data_rho.loc[i,1:]
+            data_rho.loc[i,1:]=np.sqrt(B[:,0]*B[:,0]+B[:,1]*B[:,1]+B[:,2]*B[:,2])
     elif(value=='vel_abs'):
         label_pr='Speed'
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
@@ -368,7 +383,7 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
 
 
-projection_plots("vel_abs", path='results/', min=0, max=0,skipstep=10,remove_avg_omega=False, print_residuals=False, 
+projection_plots("rho", path='results/', min=0, max=0,skipstep=2,remove_avg_omega=False, print_residuals=False, 
                  log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False)
 
 

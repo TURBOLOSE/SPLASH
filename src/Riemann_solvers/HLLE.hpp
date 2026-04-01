@@ -10,14 +10,14 @@ private:
     std::ofstream outfile, outfile_curl, outfile_b;
 
 public:
-    MUSCL_HLLE(SurfaceMesh mesh, std::vector<std::array<double, 5>> U_in, int dim, double gam, size_t threads)
-        : isothermal(mesh, U_in, dim, gam, threads){}
+    MUSCL_HLLE(SurfaceMesh mesh, std::vector<StateVec> U_in, double gam, size_t threads)
+        : isothermal(mesh, U_in, gam, threads){}
 
 
-    std::array<double, 5> flux_star(std::array<double, 5> ul, std::array<double, 5> ur, int n_face, int n_edge)
+    StateVec flux_star(StateVec ul, StateVec ur, int n_face, int n_edge)
     {
 
-        std::array<double, 5> FL, FR, F;
+        StateVec FL, FR, F;
         std::array<double, 2> c_vel;
 
         double S_R, S_L;
@@ -39,7 +39,7 @@ public:
         else if (S_L < 0 && S_R > 0)
         {
 
-            for (size_t i = 0; i < dim; i++)
+            for (size_t i = 0; i < DIM; i++)
             {
                 F[i] = (S_R * FL[i] - S_L * FR[i] + S_R * S_L * (ur[i] - ul[i])) / (S_R - S_L);
             }

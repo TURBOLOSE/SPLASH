@@ -161,7 +161,12 @@ def make_input_5_coriolis():
     #p_0=0.01
     rho_0=5
     p_0=1
-    omega=np.array([0,0,0.05])
+    omega0=np.array([0,0,0.1])
+
+    #omega=np.array([0,0,0.05])
+    # Set the local cyclone rotation purely in the Z axis since it's at the pole
+    omega_cyclone = 0.05
+    omega=np.array([0,0,omega_cyclone])
 
     a_0=np.sqrt(gam*p_0/rho_0)
 
@@ -188,12 +193,13 @@ def make_input_5_coriolis():
     
     lon=-np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1))+np.pi/2 #lat
     phi=np.arctan2(face_centers[:,1]/np.linalg.norm(face_centers, axis=1),face_centers[:,0]/np.linalg.norm(face_centers, axis=1)) #long
-    a=1
+    #a=1
+    a=2
     R0=a/3
     
     #r=a*np.arccos(np.sin(0)*np.sin(lon)+np.cos(lon)*np.cos(0)*np.cos(phi-np.pi*3/2))
     #theta_c=np.pi/2
-    theta_c=0.3
+    theta_c=0#0.3
     phi_c=0
     r=a*np.arccos(np.sin(theta_c)*np.sin(lon)+np.cos(lon)*np.cos(theta_c)*np.cos(phi-phi_c))
 
@@ -203,37 +209,74 @@ def make_input_5_coriolis():
         #if r[face_num]<R0:
         #    rho[face_num]*=1.2
 
-        if(theta[face_num]<np.pi/2+0.5+0.3 and theta[face_num]>np.pi/2+0.5-0.3):
-            l.append(rho[face_num]*np.cross(R,np.cross(omega,R))/(np.linalg.norm(R)**2))
-            v.append(np.cross(omega,R)/np.linalg.norm(R))
+
+        #if(theta[face_num]<np.pi/2+np.arccos(1/np.sqrt(2)) and theta[face_num]>np.pi/2-np.arccos(0.3/np.sqrt(2))):
+
+        #if(theta[face_num]<np.pi/2+np.arccos(1/np.sqrt(2)) and theta[face_num]>np.pi/2-np.arccos(1/np.sqrt(2))):
+        #if(theta[face_num]<np.arccos(1/np.sqrt(2))):
+        if(r[face_num]<R0):
+            # Smoothly taper the velocity to zero using a cosine bell
+            smooth_factor = 0.5 * (1 - np.cos(np.pi * r[face_num] / R0))
+            local_omega = np.array([omega_cyclone * smooth_factor,0,0])
+
+            l.append(rho[face_num]*np.cross(R,np.cross(local_omega,R))/(np.linalg.norm(R)**2))
+            v.append(np.cross(local_omega,R)/np.linalg.norm(R))
+            
+            rho[face_num]*=1.2
+            dp = 0.5 * rho[face_num] * (np.linalg.norm(v[face_num])**2) * (1 - np.cos(np.pi * r[face_num] / R0))
+            p[face_num] += dp
+
         else:
             l.append(np.array([0,0,0]))
             v.append(np.array([0,0,0]))
 
-    theta=np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1))
+        # if(theta[face_num]<np.pi/2+0.5+0.3 and theta[face_num]>np.pi/2+0.5-0.3):
+        #     l.append(rho[face_num]*np.cross(R,np.cross(omega,R))/(np.linalg.norm(R)**2))
+        #     v.append(np.cross(omega,R)/np.linalg.norm(R))
+        # else:
+        #     l.append(np.array([0,0,0]))
+        #     v.append(np.array([0,0,0]))
+        #l.append(np.array([0,0,0]))
+        #v.append(np.array([0,0,0]))
+
     #p=1+(np.linalg.norm(omega)**2*rho/2*np.sin(theta)**2)
 
+    l=np.array(l) 
+    v=np.array(v) 
+
+    theta_l = np.linspace(0,np.pi,200)
+
+    # sort theta and rho for safe interpolation
+    theta_sorted_idx = np.argsort(theta)
+    theta_sorted = theta[theta_sorted_idx]
+    rho_sorted = rho[theta_sorted_idx]
+    vel_sorted=np.linalg.norm(v[theta_sorted_idx], axis=1)
 
 
-    ## build a theta grid for integration
-    # theta_l = np.linspace(0,np.pi,200)
+    # define pressure ODE dp/dtheta = ||omega||^2/2 * sin(theta)*cos(theta) * rho(theta)
+    def press(p, th):
+        # We need np.tan(th) for the curvature term on a sphere, not np.tanh
+        tan_th = np.tan(th)
+        if np.abs(tan_th) < 1e-5:
+            cot_th = 0
+        else:
+            cot_th = 1 / tan_th
+            
+        return  np.interp(th, theta_sorted, rho_sorted) * (
+            np.interp(th, theta_sorted, vel_sorted) ** 2 * cot_th
+            + 2 * np.linalg.norm(omega0) * np.interp(th, theta_sorted, vel_sorted) * np.sin(th)
+        )
 
-    # # sort theta and rho for safe interpolation
-    # theta_sorted_idx = np.argsort(theta)
-    # theta_sorted = theta[theta_sorted_idx]
-    # rho_sorted = rho[theta_sorted_idx]
+    # hmax ensures the ODE solver doesn't skip over the band where velocity is non-zero
+    sol = odeint(press, p_0, theta_l, hmax=0.01)
 
-    # # define pressure ODE dp/dtheta = ||omega||^2/2 * sin(theta)*cos(theta) * rho(theta)
-    # def press(p, th):
-    #     return np.linalg.norm(omega)**2 /2 * np.sin(th) * np.cos(th) * np.interp(th, theta_sorted, rho_sorted)
+    if sol.ndim == 1:
+        p_short = sol
+    else:
+        p_short = sol[:, 0]
 
-    # sol = odeint(press, p_0, theta_l)
-
-    # if sol.ndim == 1:
-    #     p_short = sol
-    # else:
-    #     p_short = sol[:, 0]
-    #p=np.interp(theta, theta_l, p_short)
+    # p=np.interp(theta, theta_l, p_short)
+    # p+=rho*np.linalg.norm(omega0)**2  * np.sin(theta)**2/2
 
 
     #p=p_0*(rho/rho_0)**gam
@@ -242,8 +285,7 @@ def make_input_5_coriolis():
 
     #print(p_short)
     #print(p)
-    l=np.array(l) 
-    v=np.array(v) 
+
    #v=np.array(v)
 
     print('mean_Mach= ',np.mean(np.linalg.norm(v, axis=1)/np.sqrt(gam*p/rho)))
@@ -257,6 +299,95 @@ def make_input_5_coriolis():
         print('Energy<0!!')
 
     pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
+
+def make_input_5_B():
+    gam0=5./3
+    gam=2-1/gam0
+    #face_centers=pd.read_table('results/face_centers_ico_6.dat', header=None, delimiter=r"\s+")
+    face_centers=pd.read_table('results/face_centers.dat', header=None, delimiter=r"\s+")
+    N=len(face_centers[0])
+
+
+    face_centers=np.array(face_centers)
+
+
+    GM=0.217909
+    #rho_0=10
+    #p_0=0.01
+    rho_0=1e-4
+    p_0=1e-6
+    omega=np.array([0,0,0.1])
+    B0=np.array([0,0,0])
+
+    a_0=np.sqrt(gam*p_0/rho_0)
+
+    M_0=np.linalg.norm(omega)/a_0
+    print('M_0= ', M_0)
+
+    #M_0=(gam-1)/p_0 *np.linalg.norm(omega)**2
+
+    rho=np.ones(N, dtype='d')*rho_0 
+    p=np.ones(N, dtype='d')*p_0 
+    theta=np.arccos((face_centers[:,2])/np.linalg.norm(face_centers, axis=1)) 
+
+    #p=0.5+(np.linalg.norm(omega)**2*rho/2*np.sin(theta)**2)
+    #rho=rho_0*(1+(gam-1)/2*M_0**2*np.sin(theta, dtype='d')**2)**(1/(gam-1))
+    #p=p_0*(1+(gam-1)/2*M_0**2*np.sin(theta, dtype='d')**2)**(gam/(gam-1))
+
+
+    l=[]
+    v=[]
+    B=[]
+
+    
+    lon=-np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1))+np.pi/2 #lat
+    phi=np.arctan2(face_centers[:,1]/np.linalg.norm(face_centers, axis=1),face_centers[:,0]/np.linalg.norm(face_centers, axis=1)) #long
+    a=1
+    R0=a/3
+    theta_c=0
+    phi_c=0
+    r=a*np.arccos(np.sin(theta_c)*np.sin(lon)+np.cos(lon)*np.cos(theta_c)*np.cos(phi-phi_c))
+    face_centers=face_centers/np.vstack([np.linalg.norm(face_centers,axis=1),np.linalg.norm(face_centers,axis=1),np.linalg.norm(face_centers,axis=1)]).T
+
+    for face_num, R in enumerate(face_centers):
+
+        if r[face_num]<R0:
+            B.append(B0+np.array([0.001,0,0]))
+        else:
+            B.append(B0)
+            #rho[face_num]*=1.2
+
+        # if(theta[face_num]<np.pi/2+0.5+0.3 and theta[face_num]>np.pi/2+0.5-0.3):
+        #     l.append(rho[face_num]*np.cross(R,np.cross(omega,R))/(np.linalg.norm(R)**2))
+        #     v.append(np.cross(omega,R)/np.linalg.norm(R))
+        # else:
+        #     l.append(np.array([0,0,0]))
+        #     v.append(np.array([0,0,0]))
+        l.append(np.array([0,0,0]))
+        v.append(np.array([0,0,0]))
+
+    theta=np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1))
+    l=np.array(l) 
+    v=np.array(v) 
+    B=np.array(B)
+
+    #H=(2*gam0-1)/(gam0-1)*p/(rho*(GM-(np.linalg.norm(v+np.cross(omega, face_centers), axis=1)**2)))
+    H=np.ones(N)
+    H=np.vstack([H,H,H]).T
+
+    print('mean_Mach= ',np.mean(np.linalg.norm(v, axis=1)/np.sqrt(gam*p/rho)))
+    print('max c_s= ',np.max(gam *p/rho))
+    if(np.max(gam *p/rho)>1/np.sqrt(3)):
+        print('Warning: c_s is too high!')
+
+
+    B=B*np.sqrt(H)
+    #E=1/(gam-1)*p+rho*np.linalg.norm(v, axis=1)*np.linalg.norm(v, axis=1)/2+rho*np.linalg.norm(omega)**2*(np.sin(theta)**2)/2
+    E=1/(gam-1)*p+rho*np.linalg.norm(v, axis=1)**2/2+np.linalg.norm(B,axis=1)**2/2
+    if(E.any()<0):
+        print('Energy<0!!')
+
+    pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E,B[:,0],B[:,1],B[:,2]]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
 
 
 def make_input_5_sp_layer():
@@ -623,15 +754,12 @@ def make_input_5_const_entr():
 
 #make_input_5_new_p()
 #make_input_5()
+#make_input_5_B()
 make_input_5_coriolis()
 #make_input_5_const_entr()
-
 #make_input_5_sp_layer()
-
 #make_input_5_sp_layer_exp()
 #make_input_5_sp_layer_diff_rot()
-
-
 #make_input_4()
 #make_input_6_cos_bell()
 

@@ -1,6 +1,7 @@
 {
     "input_file":"input/input.dat",
     "non_inertial_rf_on":true,
+    "magnetic_field_on":false,
     "dim": 5,
     "CFL": 0.1,
     "dt": 1,
