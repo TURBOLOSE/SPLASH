@@ -397,7 +397,7 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
 
 
-projection_plots("p", path='plots/RH_mk1/', min=0, max=0,skipstep=6,remove_avg_omega=False, print_residuals=False, 
+projection_plots("p", path='plots/RH_mk1/', min=0, max=0,skipstep=1,remove_avg_omega=False, print_residuals=False, 
                  log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, minv=0, maxv=0.003)
 
 
