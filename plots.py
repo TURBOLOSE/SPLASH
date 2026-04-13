@@ -11,7 +11,7 @@ from scipy.interpolate import griddata
 
 
 def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, skipstep:int=1, print_residuals:bool=False, remove_avg_omega:bool=False, 
-                     log:bool=False, add_streamplot:bool=False, deltaplot:bool=False, reldeltaplot:bool=False ): 
+                     log:bool=False, add_streamplot:bool=False,minv:float=0, maxv:float=0 , deltaplot:bool=False, reldeltaplot:bool=False ): 
     #value = rho,p,omega
     
     
@@ -33,6 +33,10 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
     elif(value=='omega'):
         data_rho=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+")
         label_pr='Omega_z'
+    elif(value=='gradp'):
+        data_rho=pd.read_table(path+'gradp.dat', header=None, delimiter=r"\n").T
+        print(data_rho)
+        label_pr='Gradient of Pressure'
     elif(value=='vort'):
         data_rho=pd.read_table(path+'curl.dat', header=None, delimiter=r"\s+")
         #label_pr='Vorticity'
@@ -81,14 +85,15 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
         face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
         maxstep=len(data_rho.loc[:,0])
         n_faces=len(data_rho.loc[0,:])-1
-
+        data_rho=data_rho.astype(float)
         face_centers=np.array(face_centers)/(np.array([np.linalg.norm(np.array(face_centers), axis=1),
         np.linalg.norm(np.array(face_centers), axis=1),np.linalg.norm(np.array(face_centers), axis=1)]).T)
 
-        for i in range(maxstep):
+        for i in range(0,maxstep,skipstep):
             L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
             rho0=data_rho.loc[i,1:]
-            data_rho.loc[i,1:]=np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0
+            x=np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0
+            data_rho.loc[i,1:]=x
     elif(value=='h'):
         label_pr='Altitude [cm]'
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
@@ -177,7 +182,7 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
         yd=np.sqrt(2)*np.cos(theta_fc)*(np.cos(theta_fc)*np.cos(phi_fc)*vel[:,:,0]+np.cos(theta_fc)*np.sin(phi_fc)*vel[:,:,1]-np.sin(theta_fc)*vel[:,:,2])
         xd=1/np.sqrt(2)*((-np.sin(phi_fc)*vel[:,:,0]+np.cos(phi_fc)*vel[:,:,1])/np.sin(theta_fc))
 
-        X_gr, Y_gr=np.meshgrid(np.linspace(-2.2,2.2, 100),np.linspace(-1.4, 1.4, 100))
+        X_gr, Y_gr=np.meshgrid(np.linspace(-2.2,2.2, 500),np.linspace(-1.4, 1.4, 500))
 
         xd_gr=[]
         yd_gr=[]
@@ -192,7 +197,10 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
         colorm2 = plt.get_cmap('inferno')
         v=np.sqrt(xd_gr**2+yd_gr**2)
         mask=~np.isnan(v)
-        norm2 = mpl.colors.Normalize(vmin=np.abs(np.min(v[mask])), vmax=np.abs(np.max(v[mask])))
+        if(minv!=0 or maxv!=0):
+            norm2 = mpl.colors.Normalize(vmin=minv, vmax=maxv)
+        else:
+            norm2 = mpl.colors.Normalize(vmin=np.abs(np.min(v[mask])), vmax=np.abs(np.max(v[mask])))
 
 
 
@@ -372,7 +380,13 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colorm),cax=ax[1], orientation='horizontal', label=label_pr)
 
             if(add_streamplot):
-                ax[0].streamplot(X_gr,Y_gr,xd_gr[i],yd_gr[i],color=v[i],norm=norm2, cmap=colorm2, arrowsize=3)
+
+                mask = np.sqrt(xd_gr[i]**2+yd_gr[i]**2) > 5e-4 #threshold = 1e-3
+                xd_gr_masked = np.where(mask, xd_gr[i], np.nan)
+                yd_gr_masked = np.where(mask, yd_gr[i], np.nan)
+
+                #plt.streamplot(x, y, xd_gr_masked, yd_gr_masked)
+                ax[0].streamplot(X_gr,Y_gr,xd_gr_masked,yd_gr_masked,color=v[i],norm=norm2, cmap=colorm2, arrowsize=2, density =2)
                 fig.colorbar(mpl.cm.ScalarMappable(norm=norm2, cmap=colorm2),cax=ax[2], orientation='horizontal', label=r"v/c")
 
 
@@ -383,8 +397,8 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
 
 
-projection_plots("rho", path='results/', min=0, max=0,skipstep=2,remove_avg_omega=False, print_residuals=False, 
-                 log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False)
+projection_plots("p", path='plots/RH_mk1/', min=0, max=0,skipstep=6,remove_avg_omega=False, print_residuals=False, 
+                 log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, minv=0, maxv=0.003)
 
 
 
@@ -415,6 +429,7 @@ def integrated_plot(value):
         face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
         maxstep=len(data_rho.loc[:,0])
         n_faces=len(data_rho.loc[0,:])-1
+        data_rho=data_rho.astype(float)
 
         face_centers=np.array(face_centers)/(np.array([np.linalg.norm(np.array(face_centers), axis=1),
         np.linalg.norm(np.array(face_centers), axis=1),np.linalg.norm(np.array(face_centers), axis=1)]).T)
@@ -422,7 +437,8 @@ def integrated_plot(value):
         for i in range(maxstep):
             L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
             rho0=data_rho.loc[i,1:]
-            data_rho.loc[i,1:]=np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0
+            x=np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0
+            data_rho.loc[i,1:]=x
     else:
         print("wrong type of plot value")
         return
@@ -702,7 +718,7 @@ def vel_plot( remove_avg_omega:bool=False):
 
     #ax[0].streamplot(X_gr,Y_gr,xd_gr,yd_gr,color=np.sqrt(xd_gr*2*+yd_gr**2), arrowsize=3)
 
-    ax[0].streamplot(X_gr,Y_gr,xd_gr,yd_gr,color=v,norm=norm2, cmap=colorm2, arrowsize=2,density = 1.7)
+    ax[0].streamplot(X_gr,Y_gr,xd_gr,yd_gr,color=v,norm=norm2, cmap=colorm2, arrowsize=2,density = 1.2)
     fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colorm),cax=ax[1], orientation='horizontal', label=r'$\Sigma$, $10^7 \rm g \ \rm cm^{-2}$ ')
     #fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colorm),cax=ax[1], orientation='horizontal', label=r'Speed, c ')
     fig.colorbar(mpl.cm.ScalarMappable(norm=norm2, cmap=colorm2),cax=ax[2], orientation='horizontal', label=r"v/c")
@@ -766,14 +782,16 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
         face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
         maxstep=len(data_rho.loc[:,0])
         n_faces=len(data_rho.loc[0,:])-1
+        data_rho=data_rho.astype(float)
 
         face_centers=np.array(face_centers)/(np.array([np.linalg.norm(np.array(face_centers), axis=1),
         np.linalg.norm(np.array(face_centers), axis=1),np.linalg.norm(np.array(face_centers), axis=1)]).T)
 
-        for i in range(maxstep):
+        for i in range(0,maxstep,skipstep):
             L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
             rho0=data_rho.loc[i,1:]
-            data_rho.loc[i,1:]=np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0
+            x=np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0
+            data_rho.loc[i,1:]=x
     else:
         print("wrong type of plot value")
         return

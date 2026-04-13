@@ -19,7 +19,7 @@ protected:
     // flux_var^plus_ij flux_var^minus_ij, U_ij (short), U_ji(short)
     double dt, gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, density_floor, pressure_floor, CFL;
     int implicit_iternum;
-    bool var_gamma, implicit_solve_on, non_inertial_rf_on, mag_field_on;
+    bool var_gamma, implicit_solve_on, non_inertial_rf_on, mag_field_on, centrifugal_force_on;
     size_t steps, threads;
     double omega_ns;
     bool stop_check = false;
@@ -80,6 +80,8 @@ public:
         implicit_solve_on = parameters["implicit_solve_on"];
         non_inertial_rf_on = parameters["non_inertial_rf_on"];
         mag_field_on = parameters["magnetic_field_on"];
+        centrifugal_force_on = parameters["centrifugal_force_on"];
+
 
         if(mag_field_on && DIM!=8){
             std::cout<<"magnetic field on but DIM is not 8, check parameters.json \n";

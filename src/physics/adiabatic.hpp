@@ -469,7 +469,7 @@ protected:
         nxR = cross_product(edge_normals[n_face][n_edge], (edge_center / edge_center.norm()));
 
 
-        if(non_inertial_rf_on)
+        if(non_inertial_rf_on && centrifugal_force_on)
             PI-=u_in[0]*omega_ns * omega_ns * std::sin(theta) * std::sin(theta)/2;
 
         res[0] = u_in[0] * ndv;
@@ -489,6 +489,9 @@ protected:
             res[1] = (u_in[1] * ndv - nxR[0] * PI);
             res[2] = (u_in[2] * ndv - nxR[1] * PI);
             res[3] = (u_in[3] * ndv - nxR[2] * PI);
+           // res[1] = 0;
+           // res[2] = 0;
+           // res[3] = 0;
             res[4] = (u_in[4] + PI) * ndv;
         }
 
@@ -528,8 +531,8 @@ protected:
         
 
 
-        if(non_inertial_rf_on)
-            vel += cross_product(omega0, fc_normed);
+        //if(non_inertial_rf_on)
+        //    vel += cross_product(omega0, fc_normed);
 
         //if(l_vec.norm()>1e-8)
         //std::cout<<l_vec.norm()<<"\n";
@@ -618,6 +621,27 @@ protected:
             res[1] -= 2*u[0]*rxomxv[0];
             res[2] -= 2*u[0]*rxomxv[1];
             res[3] -= 2*u[0]*rxomxv[2];
+
+
+            const double theta_c=0.4;
+            const double phi_c=0.5;
+            const double R0=2./3;
+            const double heatpwr=2e-4;
+
+            //Gaussian heat source for test
+            double lon=-theta+M_PI/2;
+            //np.arccos(np.sin(theta_c)*np.sin(lon)+np.cos(lon)*np.cos(theta_c)*np.cos(phi-phi_c))
+            double r=2*std::acos(std::sin(theta_c)*std::sin(lon)+std::cos(lon)*std::cos(theta_c)*std::cos(phi-phi_c));
+
+            if(r<R0){
+
+                res[4] +=  heatpwr * std::exp(-r*r/(2*R0*R0));
+
+                res[0] += pow(heatpwr * std::exp(-r*r/(2*R0*R0))/(gam_0-1),1/gam_0);
+            }
+            
+            //res[4] +=
+
 
             //res[4] -= u[0] * dv_cor;
 

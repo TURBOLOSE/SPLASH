@@ -11,9 +11,9 @@ using namespace pmp;
 int main()
 {
     // SurfaceMesh mesh = uv_sphere(50,50);
-    SurfaceMesh mesh = quad_sphere(5);
+    //SurfaceMesh mesh = quad_sphere(5);
     //SurfaceMesh mesh = icosphere(5);
-    //SurfaceMesh mesh = icosphere_hex(4);
+    SurfaceMesh mesh = icosphere_hex(5);
 
     // MUSCL_base_geometry test(mesh);
 
@@ -96,20 +96,22 @@ int main()
     // MUSCL_HLLE test2(mesh, U_in, DIM, gam, threads);
     // MUSCL_HLLE_p test2(mesh, U_in, DIM, gam,omega_ns, threads);
     MUSCL_HLLC test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
-    //MUSCL_HLLCplus test2(mesh, U_in, DIM, gam, omega_ns, accretion_on, threads);
+    //MUSCL_HLLCplus test2(mesh, U_in, gam, omega_ns, accretion_on, threads);
    //MUSCL_HLLD test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
 
 
     test2.set_time(t_0);
 
     test2.write_face_centers();
+    test2.write_neighbors_edge();
+    test2.write_neighbors();
     test2.write_faces();
     test2.write_vertices();
 
     test2.write_t_rho();
     test2.write_t_p();
-    //test2.write_t_betas();
-    // test2.write_t_curl();
+    test2.write_t_betas();
+    test2.write_t_curl();
     test2.write_t_omega_z();
     test2.write_t_L();
     test2.write_t_mach();
@@ -180,7 +182,6 @@ int main()
             if(test2.get_m_field_on()){
                 test2.write_t_B();
             }
-            // test2.write_t_tracer();
         }
 
         if (test2.get_stop_check())
