@@ -470,8 +470,8 @@ def make_input_5_const_entr():
     l=[]
     theta=-np.arccos((face_centers[:,2])/np.linalg.norm(face_centers, axis=1)) 
 
-    omega=np.array([0,0,5])
-    rho_0=1
+    omega=np.array([0,0,0.1])
+    rho_0=10
     p_0=1
     a_0=np.sqrt(gam*p_0/rho_0)
 
@@ -502,8 +502,8 @@ def make_input_5_const_entr():
 
 
 #make_input_5_new_p()
-make_input_5()
-#make_input_5_const_entr()
+#make_input_5()
+make_input_5_const_entr()
 
 #make_input_5_sp_layer()
 

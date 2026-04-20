@@ -10,13 +10,17 @@ from tqdm import tqdm
 from scipy.interpolate import griddata
 
 
-def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, skipstep:int=1, print_residuals:bool=False, remove_avg_omega:bool=False, 
-                     log:bool=False, add_streamplot:bool=False, deltaplot:bool=False, reldeltaplot:bool=False ): 
+def projection_plots(value:str, path:str='results/', min:float=None, max:float=None, skipstep:int=1, print_residuals:bool=False, remove_avg_omega:bool=False, 
+                     log:bool=False, add_streamplot:bool=False, deltaplot:bool=False, reldeltaplot:bool=False, skiprows:int=0, total_steps:int=0, tilt_angle:float=0): 
     #value = rho,p,omega
     
-    
+    if(total_steps==0):
+        total_steps=int(1e10) #just a big number for the case when user doesn't want to set it, so that all steps are plotted
+
     gam=1.25
     skipf=0
+    sqrt2=np.sqrt(2)
+    twopi_over_sqrt2=2*np.pi/sqrt2
     #path='results/'
     #path='plots/article plots updated/'
     #path='plots/article_sim_mk2/'
@@ -24,62 +28,126 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
     #path='plots/new split test/2 layers/'
     #path='plots/spinup/'
 
+
+    face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
+    face_centers=np.array(face_centers)/(np.array([np.linalg.norm(np.array(face_centers), axis=1),
+        np.linalg.norm(np.array(face_centers), axis=1),np.linalg.norm(np.array(face_centers), axis=1)]).T)
+
+    theta_fc = np.acos(face_centers[:,1]/np.linalg.norm(face_centers, axis=1) * np.sin(tilt_angle) + face_centers[:,2]/np.linalg.norm(face_centers, axis=1) * np.cos(tilt_angle))
+    #theta_fc=np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1))
+    phi_fc=np.arctan2(face_centers[:,1],face_centers[:,0])
+
+
+
+
     if(value=='rho'):
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
         label_pr=r'$\Sigma$, $10^7 \rm g \ \rm cm^{-2}$ '
     elif(value=='p'):
-        data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
         label_pr='Pressure'
     elif(value=='omega'):
-        data_rho=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
         label_pr='Omega_z'
     elif(value=='vort'):
-        data_rho=pd.read_table(path+'curl.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'curl.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
         #label_pr='Vorticity'
         label_pr=r'Vorticity, $\Omega$ '
         #label_pr='Bernoulli integral -1 /R'
     elif(value=='beta'):
-        data_rho=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
         label_pr=r'$\beta$ '
     elif(value=='mach'):
-        data_rho=pd.read_table(path+'mach.dat', header=None, delimiter=r"\s+", skipfooter=skipf)
+        data_rho=pd.read_table(path+'mach.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
         label_pr='Mach number'
     elif(value=='c_s'):
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
-        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
         label_pr='Speed of sound'
         data_rho.loc[:,1:]=data_p.loc[:,1:]/data_rho.loc[:,1:]
-        data_rho.loc[:,1:]=np.sqrt(1.25*data_rho.loc[:,1:])
+        data_rho.loc[:,1:]=np.sqrt(gam*data_rho.loc[:,1:])
     elif(value=='entropy'):
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
-        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
-        data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
         label_pr='Entropy'
         data_rho.loc[:,1:]=data_p.loc[:,1:]/(data_rho.loc[:,1:]**  ( (10-3*data_beta.loc[:,1:])/(8-3*data_beta.loc[:,1:]) )   )
-
     elif(value=='vel_abs'):
-        print("speed")
         label_pr='Speed'
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
-        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
-        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
-        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
-        face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
-        maxstep=len(data_rho.loc[:,0])
-        n_faces=len(data_rho.loc[0,:])-1
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
 
-        face_centers=np.array(face_centers)/(np.array([np.linalg.norm(np.array(face_centers), axis=1),
-        np.linalg.norm(np.array(face_centers), axis=1),np.linalg.norm(np.array(face_centers), axis=1)]).T)
+        maxstep=np.min([len(data_rho.loc[:,0]), total_steps])
 
-        for i in range(maxstep):
+
+        for i in range(0,maxstep,skipstep):
             L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
             rho0=data_rho.loc[i,1:]
             data_rho.loc[i,1:]=np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0
-    else:
-        print("wrong type of plot value")
-        return
+    elif(value=='h'):
+        label_pr='H [cm]'
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        GM = 0.217909 # grav parameter in R_unit^3/t_unit^2
+        maxstep=np.min([len(data_rho.loc[:,0]), total_steps])
 
-    maxstep=len(data_rho.loc[:,0])
+
+        e_theta=np.column_stack([np.cos(theta_fc)*np.cos(phi_fc), np.cos(theta_fc)*np.sin(phi_fc), -np.sin(theta_fc)])
+
+        # Keep current behavior: the final assignment overwrites all rows using the last step values.
+        for i in tqdm(range(0,maxstep,skipstep)):
+            L=np.column_stack([
+                data_Lx.iloc[i,1:].to_numpy(dtype=float),
+                data_Ly.iloc[i,1:].to_numpy(dtype=float),
+                data_Lz.iloc[i,1:].to_numpy(dtype=float)
+            ])
+            rho0=data_rho.iloc[i,1:].to_numpy(dtype=float)
+            vel_i=np.cross(face_centers,L)/rho0[:,None]
+            g_eff =   GM - np.linalg.norm(vel_i, axis=1)**2 
+            data_rho.loc[i,1:]=(2*gam-1)*(gam-1)*data_p.iloc[i,1:]/(data_rho.iloc[i,1:]*g_eff) * 1e6
+
+    elif value=='L':
+        label_pr=r'T (K)'
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
+
+        data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
+
+        #maxstep=np.min([len(data_rho.loc[:,0]), len(data_p.loc[:,0]),len(data_Lx.loc[:,0]),len(data_Ly.loc[:,0]),len(data_Lz.loc[:,0]), len(data_beta.loc[:,0])])
+        maxstep=np.min([len(data_rho.loc[:,0]), total_steps])
+
+
+        data_beta=np.array(data_beta.loc[:,1:])
+        vel=[]
+
+        for i in tqdm(range(0,maxstep,skipstep)):
+            L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
+            rho0=data_rho.loc[i,1:]
+            vel.append(np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0)
+        vel=np.array(vel)
+
+
+        surface_area=4*np.pi/len(face_centers)
+        kappa = 3.4e6 #// scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
+        GM = 0.217909 # grav parameter in R_unit^3/t_unit^2
+        g_eff =  - vel * vel + GM
+        j=0
+        for step in tqdm(range(0,maxstep,skipstep)):
+            #data_rho.loc[step,1:]=(g_eff[j] / kappa * (1 - data_beta[step])* surface_area)*9e27*1e12/(3.3e-5) /4e33 
+            data_rho.loc[step,1:]=np.power((g_eff[j] / kappa * (1 - data_beta[step])* surface_area)*9e27*1e12/(3.3e-5) /(5.6e-5),1/4) 
+            j+=1
+
+
+    maxstep=np.min([len(data_rho.loc[:,0]), total_steps])
 
     if(print_residuals):
         for i in range(1,maxstep):
@@ -113,17 +181,14 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
 
     if(add_streamplot):
-        data_dens=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
-        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
-        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
-        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
-        face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
-        face_centers=np.array(face_centers)/(np.array([np.linalg.norm(np.array(face_centers), axis=1),
-        np.linalg.norm(np.array(face_centers), axis=1),np.linalg.norm(np.array(face_centers), axis=1)]).T)
+        data_dens=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
 
         maxstep=len(data_dens.loc[:,0])
         vel=[]
-        for i in range(maxstep):
+        for i in range(0,maxstep,skipstep):
             L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
             rho0=data_dens.loc[i,1:]
             vel.append(-np.cross(face_centers,L)/np.array([rho0,rho0,rho0]).T)
@@ -134,20 +199,20 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
         gc.collect()
 
         vel=np.array(vel)
-        theta_fc=np.arccos(face_centers[:,2])
-        phi_fc=np.arctan2(face_centers[:,1],face_centers[:,0])
-        x_fc=phi_fc/np.sqrt(2)
+        #theta_fc=np.arccos(face_centers[:,2])
+        x_fc=phi_fc/np.sqrt(2) #Projection
         y_fc=np.sin(-theta_fc+np.pi/2)*np.sqrt(2)
 
-        yd=np.sqrt(2)*np.cos(theta_fc)*(np.cos(theta_fc)*np.cos(phi_fc)*vel[:,:,0]+np.cos(theta_fc)*np.sin(phi_fc)*vel[:,:,1]-np.sin(theta_fc)*vel[:,:,2])
+        yd=np.sqrt(2)*np.sin(theta_fc)*(np.cos(theta_fc)*np.cos(phi_fc)*vel[:,:,0]+np.cos(theta_fc)*np.sin(phi_fc)*vel[:,:,1]-np.sin(theta_fc)*vel[:,:,2])
         xd=1/np.sqrt(2)*((-np.sin(phi_fc)*vel[:,:,0]+np.cos(phi_fc)*vel[:,:,1])/np.sin(theta_fc))
 
-        X_gr, Y_gr=np.meshgrid(np.linspace(-2.2,2.2, 100),np.linspace(-1.4, 1.4, 100))
+        X_gr, Y_gr=np.meshgrid(np.linspace(-2.2,2.2, 200),np.linspace(-1.4, 1.4, 200))
 
         xd_gr=[]
         yd_gr=[]
-        for i in range(maxstep):
-            mask=np.logical_or(np.isnan(xd[i], where=False),np.isnan(xd[i], where=False))
+        for i in range(0,len(xd)):
+            #mask=np.logical_or(np.isnan(xd[i], where=False),np.isnan(xd[i], where=False))
+            mask = ~np.logical_or(np.logical_or(np.isnan(xd[i]),np.isinf(xd[i])), np.logical_or(np.isnan(yd[i]),np.isinf(yd[i])))
             xd_gr.append(griddata(np.stack([x_fc[mask].T, y_fc[mask].T]).T, xd[i][mask],(X_gr,Y_gr), method='nearest'))
             yd_gr.append(griddata(np.stack([x_fc[mask].T, y_fc[mask].T]).T, yd[i][mask],(X_gr,Y_gr), method='nearest'))    
 
@@ -163,8 +228,6 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
 
     data_faces=pd.read_table(path+'faces.dat', header=None, delimiter=r"\s+", names=['col' + str(x) for x in range(6) ])
-    face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
-
     data=pd.read_table(path+'vertices.dat', header=None, delimiter=r"\s+")
     vertices=np.array(data.loc[:,:])
     faces=np.array(data_faces.loc[:,:])
@@ -198,12 +261,13 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
 
 
 
-    theta=-np.arccos(vertices[:,2])+np.pi/2
+    #theta=-np.arccos(vertices[:,2])+np.pi/2
+    theta = -np.acos(vertices[:,1]/np.linalg.norm(vertices, axis=1) * np.sin(tilt_angle) + vertices[:,2]/np.linalg.norm(vertices, axis=1) * np.cos(tilt_angle))+np.pi/2
     phi=np.arctan2(vertices[:,1],vertices[:,0])
 
 
-    x_plot=phi/(np.sqrt(2)) #projection
-    y_plot=np.sqrt(2)*np.sin(theta)
+    x_plot=phi/sqrt2 #projection
+    y_plot=sqrt2*np.sin(theta)
 
 
     x_plot_full=[]
@@ -225,7 +289,7 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
         if( (not (0 in sign_arr)) and (1 in sign_arr) and (-1 in sign_arr) and (np.min(np.abs(x_plot_full[face_num])) > 1)):
             for i,element in enumerate(x_plot_full[face_num]):
                 if(element < 0):
-                    x_plot_full[face_num][i]+=2*np.pi/np.sqrt(2)
+                    x_plot_full[face_num][i]+=twopi_over_sqrt2
 
 
         patches = []
@@ -245,9 +309,12 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
     #=====================================================
     colorm = plt.get_cmap('viridis')
 
-    if(min==0 and max==0):
-        min_rho=np.min( data_rho.loc[:maxstep,1:len(x_plot)])
-        max_rho=np.max( data_rho.loc[:maxstep,1:len(x_plot)])
+    plot_values=data_rho.iloc[:,1:].to_numpy(dtype=float)
+
+    if(min==None and max==None):
+        min_rho=np.min(plot_values[np.isnan(plot_values)==False])
+        max_rho=np.max(plot_values[np.isnan(plot_values)==False])
+        print(min_rho, max_rho)
     else:
         min_rho=min
         max_rho=max
@@ -267,12 +334,14 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
    
 
     om_mean=0
-    t=data_rho.loc[:,0]
+    t=data_rho.iloc[:,0].to_numpy(dtype=float)
     if(remove_avg_omega):
         data_om=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+")
         data_om=data_om.loc[:,1:]
         om_mean=np.mean(data_om,axis=1)
 
+
+    j=0
     for i in tqdm(range(maxstep)): #dens
         if((i % skipstep)==0 ):
 
@@ -283,7 +352,7 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
                 phi=phi+2*k*np.pi
 
 
-                x_plot=phi/(np.sqrt(2)) #projection
+                x_plot=phi/sqrt2 #projection
 
 
                 x_plot_full=[]
@@ -301,7 +370,7 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
                     if( (not (0 in sign_arr)) and (1 in sign_arr) and (-1 in sign_arr) and (np.min(np.abs(x_plot_full[face_num])) > 1)):
                         for j1,element in enumerate(x_plot_full[face_num]):
                             if(element < 0):
-                                x_plot_full[face_num][j1]+=2*np.pi/np.sqrt(2)
+                                x_plot_full[face_num][j1]+=twopi_over_sqrt2
 
 
                 patches = []
@@ -311,7 +380,7 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
                     patches.append(polygon)
 
             collection = PatchCollection(patches)
-            colors=colorm(norm(data_rho.loc[i,1:len(faces)]))
+            colors=colorm(norm(plot_values[i]))
 
 
             if(add_streamplot):
@@ -322,7 +391,7 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
             plt.subplots_adjust(hspace=10)
             #rho=(np.array(data_rho.loc[i,1:len(faces)])-min_rho)/(max_rho-min_rho)
             #fig.suptitle('t='+"{:.4f}".format(data_rho.loc[i,0]))
-            fig.suptitle('t='+"{:.4f}".format(data_rho.loc[i,0]*3.3e-5)+' s')
+            fig.suptitle('t='+"{:.4f}".format(t[i]*3.3e-5)+' s')
             ax[0].set_xlabel(r'$\varphi / \sqrt{2}$', fontsize=25)
             ax[0].set_ylabel(r'$\sqrt{2}  \cos(\theta )$', fontsize=25)
 
@@ -337,19 +406,19 @@ def projection_plots(value:str, path:str='results/', min:float=0, max:float=0, s
             fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colorm),cax=ax[1], orientation='horizontal', label=label_pr)
 
             if(add_streamplot):
-                ax[0].streamplot(X_gr,Y_gr,xd_gr[i],yd_gr[i],color=v[i],norm=norm2, cmap=colorm2, arrowsize=3)
+                ax[0].streamplot(X_gr,Y_gr,xd_gr[j],yd_gr[j],color=v[j],norm=norm2, cmap=colorm2, arrowsize=3, density=1.5)
                 fig.colorbar(mpl.cm.ScalarMappable(norm=norm2, cmap=colorm2),cax=ax[2], orientation='horizontal', label=r"v/c")
+                j+=1
 
 
             fig.savefig('plots/fig'+"{0:0>4}".format(i)+'.png', bbox_inches='tight',dpi=200)
-            plt.clf()
-            plt.close()
+            plt.close(fig)
     
 
 
 
-projection_plots("rho", path='results/', min=0, max=0,skipstep=10,remove_avg_omega=True, print_residuals=False, 
-                 log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False)
+projection_plots("rho", path='plots/res26_3/', min=None, max=None,skipstep=1000,remove_avg_omega=False, print_residuals=False, 
+                 log=False, add_streamplot=True, deltaplot=False, reldeltaplot=False, skiprows=0,total_steps=0, tilt_angle=0.1)
 
 
 
@@ -357,11 +426,13 @@ projection_plots("rho", path='results/', min=0, max=0,skipstep=10,remove_avg_ome
 
 
 
-def integrated_plot(value): 
+def integrated_plot(value, kinetic_component:str='total'): 
     #value = rho,p
 
-    path='results/'
+    gam=2-1/(5/3)
+    #path='results/'
     #path='plots/cooling/'
+    path="plots/res26_3/"
 
 
     if(value=='rho'):
@@ -369,9 +440,93 @@ def integrated_plot(value):
         label_pr=r'm, $10^7 \rm g $ '
     elif(value=='p'):
         data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
-        label_pr='Pressure'
+        label_pr='Internal energy [erg]'
+        data_rho.loc[:,1:]*=1/(gam-1)
+        data_rho.loc[:,1:]*=9*10**27*10**12
+    elif(value=='omega'):
+        data_rho=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+")
+        label_pr='Omega_z'
+    elif(value=='E_kin'):
+        valid_components={'total', 'phi', 'theta', 'all'}
+        if kinetic_component not in valid_components:
+            print("wrong kinetic_component, use 'total', 'phi', 'theta' or 'all'")
+            return
+
+        label_pr='Kinetic energy [erg]'
+        vel=[]
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
+        face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
+        maxstep=len(data_rho.loc[:,0])
+
+        face_centers=np.array(face_centers)
+        face_centers_norm=np.linalg.norm(face_centers, axis=1)
+        face_centers=face_centers/np.array([face_centers_norm, face_centers_norm, face_centers_norm]).T
+
+        theta_fc=np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1))
+        phi_fc=np.arctan2(face_centers[:,1]/np.linalg.norm(face_centers, axis=1),
+                        face_centers[:,0]/np.linalg.norm(face_centers, axis=1))
+        e_theta=np.column_stack([np.cos(theta_fc)*np.cos(phi_fc), np.cos(theta_fc)*np.sin(phi_fc), -np.sin(theta_fc)])
+        e_phi=np.column_stack([-np.sin(phi_fc), np.cos(phi_fc), np.zeros_like(phi_fc)])
+
+        kinetic_fields={
+            'total': np.zeros((maxstep, len(face_centers))),
+            'theta': np.zeros((maxstep, len(face_centers))),
+            'phi': np.zeros((maxstep, len(face_centers)))
+        }
+
+        for i in range(maxstep):
+            L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
+            rho0=data_rho.loc[i,1:]
+            vel_i=np.cross(face_centers,L)/np.array([rho0, rho0, rho0]).T
+            vel.append(vel_i)
+
+            v_theta=np.sum(vel_i*e_theta, axis=1)
+            v_phi=np.sum(vel_i*e_phi, axis=1)
+
+            # v_r is assumed to be zero for this model, so only tangential parts are used.
+            kinetic_fields['theta'][i]=data_rho.loc[i,1:]*v_theta**2/2
+            kinetic_fields['phi'][i]=data_rho.loc[i,1:]*v_phi**2/2
+            kinetic_fields['total'][i]=kinetic_fields['theta'][i]+kinetic_fields['phi'][i]
+
+        conv=9*10**27*10**12
+        for key in kinetic_fields:
+            kinetic_fields[key]*=conv
+
+        if(kinetic_component!='all'):
+            data_rho.loc[:,1:]=kinetic_fields[kinetic_component]
+            label_pr=f"Kinetic energy ({kinetic_component}) [erg]"
+
+
+    elif(value=='E'):
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        label_pr='Energy [erg]'
+        v=[]
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
+        face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
+        maxstep=len(data_rho.loc[:,0])
+        n_faces=len(data_rho.loc[0,:])-1
+
+        face_centers=np.array(face_centers)/(np.array([np.linalg.norm(np.array(face_centers), axis=1),
+        np.linalg.norm(np.array(face_centers), axis=1),np.linalg.norm(np.array(face_centers), axis=1)]).T)
+
+        for i in range(maxstep):
+            L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
+            rho0=data_rho.loc[i,1:]
+            v.append(np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0)
+
+        v=np.array(v)
+        data_rho.loc[:,1:]*=v**2/2
+        data_rho.loc[:,1:]+=data_p.loc[:,1:]/(gam-1)
+        data_rho.loc[:,1:]*=9*10**27*10**12
+
+
     elif(value=='vel_abs'):
-        print("speed")
         label_pr='Speed'
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
@@ -430,23 +585,55 @@ def integrated_plot(value):
 
     surface_areas=np.array(surface_areas)
 
-    plot_data=[]
     t=np.array(data_rho.loc[:,0])
 
-    for step in range(maxstep):
-        plot_data.append(np.sum(np.array(data_rho.loc[step,1:])*surface_areas))
+    if(value=='E_kin' and kinetic_component=='all'):
+        series={}
+        for key in ['total','theta','phi']:
+            series[key]=np.sum(kinetic_fields[key]*surface_areas[None,:], axis=1)
+            np.save(path+f"Kinetic energy ({key}) [erg]", np.column_stack((t*3.3e-5,series[key])))
 
-    plot_data=np.array(plot_data)
+        plt.plot(t*3.3e-5,series['total'], label='total')
+        plt.plot(t*3.3e-5,series['theta'], label='theta')
+        plt.plot(t*3.3e-5,series['phi'], label='phi')
+        plt.xlabel("t,s")
+        plt.ylabel("Total Kinetic energy [erg]")
+        plt.legend()
+        plt.savefig('plots/1integ_e_kin_split.png', bbox_inches='tight',dpi=300)
+        plt.clf()
+        plt.close()
+    elif(value=='omega'):
+        plot_data=[]
+        for step in range(maxstep):
+            plot_data.append(np.mean(np.array(data_rho.loc[step,1:])))
+        plt.plot(t*3.3e-5,plot_data)
+        plt.xlabel("t,s")
+        plt.ylabel("Total "+label_pr)
+        plt.savefig('plots/integ_plot_'+label_pr+'.png', bbox_inches='tight',dpi=300)
+        print('plots/integ_plot_'+label_pr+'.png')
+        plt.clf()
+        plt.close()
+    else:
+        plot_data=[]
+        for step in range(maxstep):
+           plot_data.append(np.sum(np.array(data_rho.loc[step,1:])*surface_areas/(4*np.pi)))
+           #plot_data.append(np.mean(np.array(data_rho.loc[step,1:])*surface_areas/(4*np.pi)))
+           #plot_data.append(np.mean(np.array(data_rho.loc[step,1:])*surface_areas/(4*np.pi)))
 
-    plt.plot(t*3.3e-5,plot_data)
-    plt.xlabel("t,s")
-    plt.ylabel("total "+label_pr)
-    plt.savefig('plots/integ_plt.png', bbox_inches='tight',dpi=300)
-    plt.clf()
-    plt.close()
+        plot_data=np.array(plot_data)
+
+        np.save(path+label_pr, np.column_stack((t*3.3e-5,plot_data)))
+
+        plt.plot(t*3.3e-5,plot_data)
+        plt.xlabel("t,s")
+        plt.ylabel("Total "+label_pr)
+        plt.savefig('plots/integ_plot_'+label_pr+'.png', bbox_inches='tight',dpi=300)
+        print('plots/integ_plot_'+label_pr+'.png')
+        plt.clf()
+        plt.close()
 
 
-#integrated_plot('vel_abs')
+integrated_plot('E', kinetic_component='all')
 
 
 
@@ -681,13 +868,14 @@ def vel_plot( remove_avg_omega:bool=False):
 
 
 
-def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=0, ylim_max:float=0):
+def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=0, ylim_max:float=0, binning:bool=False, n_bins:int=50):
 
 
     data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
     face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
     face_centers=np.array(face_centers)
     theta_fc=-np.arccos(np.array(face_centers[:,2])/np.linalg.norm(face_centers, axis=1))+np.pi/2
+
     if(value=='rho'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         label_pr=r'$\Sigma$, $10^7 \rm g \ \rm cm^{-2}$ '
@@ -751,7 +939,15 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
 
     for i in tqdm(range(maxstep)):
         if((i % skipstep)==0 ):
-            plt.scatter(theta_fc, data_rho.loc[i,1:], s=2)
+
+            if(binning):
+                bins=np.linspace(-np.pi/2, np.pi/2, n_bins)
+                digitized = np.digitize(theta_fc, bins)
+                bin_means=[np.mean(data_rho.loc[i,1:][digitized==j]) for j in range(1, len(bins))]
+                bin_centers=0.5*(bins[:-1]+bins[1:])
+                plt.plot(bin_centers, bin_means)
+            else:
+                plt.scatter(theta_fc, data_rho.loc[i,1:], s=2)
             plt.xlabel(r'$\theta$')
             plt.ylabel(label_pr)
             plt.title('t='+"{:.4f}".format(data_rho.loc[i,0]*3.3e-5)+' s')
@@ -762,4 +958,4 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
 
 
 
-#plot_vs_theta('omega',path='plots/res26_2(1)/', skipstep=100, ylim_min=0, ylim_max=0.5)
+plot_vs_theta('entropy',path="plots/res26_3alpha2e4/", skipstep=300, ylim_min=0, ylim_max=0, binning=True, n_bins=50)
