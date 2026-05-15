@@ -8,25 +8,18 @@ class MUSCL_HLLCplus : public adiabatic
 
 
 public:
-    MUSCL_HLLCplus(SurfaceMesh mesh, std::vector<std::vector<double>> U_in,
-     int dim, double gam, double omega_ns_i, bool accretion_on_i, size_t threads)
-        :adiabatic(mesh, U_in, dim, gam, omega_ns_i,accretion_on_i, threads){}
+    MUSCL_HLLCplus(SurfaceMesh mesh, std::vector<StateVec> U_in, double gam, double omega_ns_i, bool accretion_on_i, size_t threads)
+        :adiabatic(mesh, U_in, gam, omega_ns_i,accretion_on_i, threads){}
 
 protected:
-    
-    std::vector<double> flux_star(std::vector<double>& u_L, std::vector<double>& u_R, int n_face, int n_edge)
+
+    StateVec flux_star(StateVec& u_L, StateVec& u_R, int n_face, int n_edge)
     {   // HLLC+ flux
 
-        std::vector<double> F_L, F_R, F_L_star, F_R_star, c_vel, D, F, flux_fix_R, flux_fix_L;
+        StateVec F_L, F_R, F_L_star, F_R_star, D, F, flux_fix_R, flux_fix_L;
+        std::array<double, 2> c_vel;
         double S_star, p_L, p_R, rho_R, rho_L, v_L, v_R;
         double S_R, S_L, R;
-        F_L.resize(dim);
-        F_R.resize(dim);
-        F_L_star.resize(dim);
-        F_R_star.resize(dim);
-        D.resize(dim);
-        flux_fix_R.resize(dim);
-        flux_fix_L.resize(dim);
 
         vector3d<double> vel_L, vel_R, l_vec, nxR, edge_center;
 
@@ -149,7 +142,7 @@ protected:
         flux_fix_L[4] = (f_star - 1) * (V_R - V_L) * S_star * phi_L * phi_R / (phi_R - phi_L);
         flux_fix_R[4] = (f_star - 1) * (V_R - V_L) * S_star * phi_L * phi_R / (phi_R - phi_L);
 
-        for (size_t i = 0; i < dim; i++)
+        for (size_t i = 0; i < DIM; i++)
         {
             F_L_star[i] = (S_star * (S_L * u_L[i] - F_L[i]) + S_L * P_LR * D[i]) / (S_L - S_star) + flux_fix_L[i];
             F_R_star[i] = (S_star * (S_R * u_R[i] - F_R[i]) + S_R * P_LR * D[i]) / (S_R - S_star) + flux_fix_R[i];

@@ -426,18 +426,18 @@ projection_plots("rho", path='plots/res26_3/', min=None, max=None,skipstep=1000,
 
 
 
-def integrated_plot(value, kinetic_component:str='total'): 
+def integrated_plot(value:str, path:str='results/', kinetic_component:str='total', relative:bool=False): 
     #value = rho,p
 
     gam=2-1/(5/3)
     #path='results/'
     #path='plots/cooling/'
-    path="plots/res26_3/"
+
 
 
     if(value=='rho'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
-        label_pr=r'm, $10^7 \rm g $ '
+        label_pr=r'm, $10^7$ g '
     elif(value=='p'):
         data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
         label_pr='Internal energy [erg]'
@@ -547,9 +547,14 @@ def integrated_plot(value, kinetic_component:str='total'):
         print("wrong type of plot value")
         return
     
-    dist = lambda r1,r2: 2*np.arcsin(np.linalg.norm(r1-r2)/2)
 
     maxstep=len(data_rho.loc[:,0])
+
+
+
+    
+    dist = lambda r1,r2: 2*np.arcsin(np.linalg.norm(r1-r2)/2)
+
 
 
     data_faces=pd.read_table(path+'faces.dat', header=None, delimiter=r"\s+", names=['col' + str(x) for x in range(6) ])
@@ -604,8 +609,11 @@ def integrated_plot(value, kinetic_component:str='total'):
         plt.close()
     elif(value=='omega'):
         plot_data=[]
-        for step in range(maxstep):
-            plot_data.append(np.mean(np.array(data_rho.loc[step,1:])))
+        for step in tqdm(range(maxstep)):
+            if(relative and value!='E_kin'):
+                plot_data.append(np.mean(np.array(data_rho.loc[step,1:]/data_rho.loc[0,1:])))
+            else:
+                plot_data.append(np.mean(np.array(data_rho.loc[step,1:])))
         plt.plot(t*3.3e-5,plot_data)
         plt.xlabel("t,s")
         plt.ylabel("Total "+label_pr)
@@ -615,10 +623,11 @@ def integrated_plot(value, kinetic_component:str='total'):
         plt.close()
     else:
         plot_data=[]
-        for step in range(maxstep):
-           plot_data.append(np.sum(np.array(data_rho.loc[step,1:])*surface_areas/(4*np.pi)))
-           #plot_data.append(np.mean(np.array(data_rho.loc[step,1:])*surface_areas/(4*np.pi)))
-           #plot_data.append(np.mean(np.array(data_rho.loc[step,1:])*surface_areas/(4*np.pi)))
+        for step in tqdm(range(maxstep)):
+            if(relative and value!='E_kin'):
+                plot_data.append(np.sum(np.array(data_rho.loc[step,1:])*surface_areas/(4*np.pi)))
+            else:
+                plot_data.append(np.sum(np.array(data_rho.loc[step,1:])*surface_areas/(4*np.pi)))
 
         plot_data=np.array(plot_data)
 
@@ -633,7 +642,7 @@ def integrated_plot(value, kinetic_component:str='total'):
         plt.close()
 
 
-integrated_plot('E', kinetic_component='all')
+integrated_plot('p', path="plots/res26_1HR/", kinetic_component='all', relative=False)
 
 
 
@@ -864,8 +873,177 @@ def vel_plot( remove_avg_omega:bool=False):
 
 
 
-#vel_plot(remove_avg_omega=True)
+def butterfly_diagram(value:str, path:str='results/', min:float=None, max:float=None, skipstep:int=1, log:bool=False, skiprows:int=0, total_steps:int=0, tilt_angle:float=0, n_bins:int=100): 
+    if(total_steps==0):
+        total_steps=int(1e10)
 
+    gam=1.25
+
+    face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
+    face_centers=np.array(face_centers)/(np.array([np.linalg.norm(np.array(face_centers), axis=1),
+        np.linalg.norm(np.array(face_centers), axis=1),np.linalg.norm(np.array(face_centers), axis=1)]).T)
+
+    # Latitude analog: -pi/2 to pi/2
+    theta_fc = -np.acos(face_centers[:,1] * np.sin(tilt_angle) + face_centers[:,2] * np.cos(tilt_angle)) + np.pi/2
+
+    if(value=='rho'):
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        label_pr=r'$\Sigma$, $10^7 \rm g \ \rm cm^{-2}$ '
+    elif(value=='p'):
+        data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        label_pr='Pressure'
+    elif(value=='omega_z'):
+        data_rho=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        label_pr='Omega_z'
+    elif(value=='omega'):
+        data_rho=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+
+        maxstep=np.min([len(data_rho.loc[:,0]), total_steps])
+
+        for i in range(0,maxstep,skipstep):
+            rho=data_rho.loc[i,1:]
+            #L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T
+            omega=(data_Ly.loc[i,1:] * np.sin(tilt_angle) + data_Lz.loc[i,1:] * np.cos(tilt_angle))/(data_rho.loc[i,1:]*np.cos(theta_fc)**2)
+            data_rho.loc[i,1:]=omega
+        label_pr='Omega'
+    elif(value=='vort'):
+        data_rho=pd.read_table(path+'curl.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        label_pr=r'Vorticity, $\Omega$ '
+    elif(value=='beta'):
+        data_rho=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        label_pr=r'$\beta$ '
+    elif(value=='mach'):
+        data_rho=pd.read_table(path+'mach.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        label_pr='Mach number'
+    elif(value=='c_s'):
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        label_pr='Speed of sound'
+        data_rho.loc[:,1:]=data_p.loc[:,1:]/data_rho.loc[:,1:]
+        data_rho.loc[:,1:]=np.sqrt(gam*data_rho.loc[:,1:])
+    elif(value=='entropy'):
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        label_pr='Entropy'
+        data_rho.loc[:,1:]=data_p.loc[:,1:]/(data_rho.loc[:,1:]**  ( (10-3*data_beta.loc[:,1:])/(8-3*data_beta.loc[:,1:]) )   )
+    elif(value=='vel_abs'):
+        label_pr='Speed'
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+
+        maxstep=np.min([len(data_rho.loc[:,0]), total_steps])
+
+        for i in range(0,maxstep,skipstep):
+            L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
+            rho0=data_rho.loc[i,1:]
+            data_rho.loc[i,1:]=np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0
+    elif(value=='L'):
+        label_pr=r'T (K)'
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
+
+        data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
+
+        #maxstep=np.min([len(data_rho.loc[:,0]), len(data_p.loc[:,0]),len(data_Lx.loc[:,0]),len(data_Ly.loc[:,0]),len(data_Lz.loc[:,0]), len(data_beta.loc[:,0])])
+        maxstep=np.min([len(data_rho.loc[:,0]), total_steps])
+
+
+        data_beta=np.array(data_beta.loc[:,1:])
+        vel=[]
+
+        for i in tqdm(range(0,maxstep,skipstep)):
+            L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
+            rho0=data_rho.loc[i,1:]
+            vel.append(np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0)
+        vel=np.array(vel)
+
+
+        surface_area=4*np.pi/len(face_centers)
+        kappa = 3.4e6 #// scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
+        GM = 0.217909 # grav parameter in R_unit^3/t_unit^2
+        g_eff = - vel * vel + GM
+        g_eff[g_eff<0]=0
+        j=0
+        for step in tqdm(range(0,maxstep,skipstep)):
+            data_rho.loc[step,1:]=np.power((g_eff[j] / kappa * (1 - data_beta[step])* surface_area)*9e27*1e12/(3.3e-5) /(5.6e-5),1/4) 
+            j+=1
+    else:
+        print("wrong type of plot value")
+        return
+
+    maxstep=int(np.min([len(data_rho.loc[:,0]), total_steps]))
+    
+    if(log):
+        data_rho.loc[:,1:]=np.log10(data_rho.loc[:,1:].astype(float))
+        label_pr=r'$log_{10}$ of '+label_pr
+
+    t_full = data_rho.iloc[:,0].to_numpy(dtype=float) * 3.3e-5
+    
+    bins = np.linspace(np.min(theta_fc), np.max(theta_fc), n_bins + 1)
+    bin_centers = 0.5 * (bins[:-1] + bins[1:])
+    digitized = np.digitize(theta_fc, bins)
+    
+    # Pre-calculate time steps to process
+    steps = list(range(0, maxstep, skipstep))
+    t_plot = t_full[steps]
+    Z = np.zeros((len(steps), n_bins))
+    
+    for idx, i in enumerate(tqdm(steps)):
+        row_data = data_rho.iloc[i, 1:].to_numpy(dtype=float)
+        for b in range(1, n_bins + 1):
+            mask = (digitized == b)
+            if np.any(mask):
+                Z[idx, b-1] = np.mean(row_data[mask])
+            else:
+                Z[idx, b-1] = np.nan
+                
+    T_mesh, Theta_mesh = np.meshgrid(t_plot, bin_centers)
+    
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    if min is None:
+        min_val = np.nanmin(Z)
+    else:
+        min_val = min
+        
+    if max is None:
+        max_val = np.nanmax(Z)
+    else:
+        max_val = max
+        
+    mesh = ax.pcolormesh(T_mesh, Theta_mesh, Z.T, cmap='viridis', vmin=min_val, vmax=max_val, shading='auto')
+    
+    ax.set_xlabel('Time [s]', fontsize=20)
+    ax.set_ylabel(r'Latitude $\theta$ [rad]', fontsize=20)
+    ax.set_title(f'Butterfly Diagram - {label_pr}', fontsize=22)
+    ax.set_ylim([-np.pi/2, np.pi/2])
+
+    data_ts=pd.read_table(path+'lightcurve0.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
+    lavg=(data_ts.loc[:,1]-np.mean(data_ts.loc[:,1]))/np.max(data_ts.loc[:,1]-np.mean(data_ts.loc[:,1]))
+    ax.plot(data_ts.loc[:,0]*3.3e-5, lavg, color='tab:red', alpha=0.7, label='Lightcurve (scaled)')
+    ax.legend(loc='upper right', fontsize=20, framealpha=0.5)
+
+    cbar = fig.colorbar(mesh, ax=ax)
+    cbar.set_label(label_pr, fontsize=20)
+    
+    plt.tight_layout()
+    fig.savefig(f'plots/butterfly_{value}.png', bbox_inches='tight', dpi=200)
+    plt.clf()
+    plt.close()
+
+
+butterfly_diagram('rho', path='plots/res26_3alpha2e4/', min=None, max=None, skipstep=100, log=True, skiprows=0, total_steps=0, tilt_angle=0.1, n_bins=100)
 
 
 def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=0, ylim_max:float=0, binning:bool=False, n_bins:int=50):

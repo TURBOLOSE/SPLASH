@@ -3,24 +3,33 @@
 #include "../geometry/MUSCL_geometry.hpp"
 #include "../json.hpp"
 #include <omp.h>
+#include <array>
+
+//constexpr size_t DIM = 8;
+constexpr size_t DIM = 5;
+//constexpr size_t DIM = 4;
+using StateVec = std::array<double, DIM>;
+
 
 class MUSCL_base : public MUSCL_base_geometry
 {
 protected:
-    std::vector<std::vector<double>> U, U_temp, U_temp_1, source_plus;
+    std::vector<StateVec> U, U_temp, U_temp_1, source_plus;
     std::vector<double> rho_an, p_an;
-    std::vector<std::vector<std::vector<double>>> flux_var_plus, flux_var_minus, U_plus, U_minus;
+    std::vector<std::vector<StateVec>> flux_var_plus, flux_var_minus, U_plus, U_minus;
     // flux_var^plus_ij flux_var^minus_ij, U_ij (short), U_ji(short)
-    double dt, gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, density_floor, pressure_floor, CFL;
-    int dim, implicit_iternum;
-    bool var_gamma, implicit_solve_on;
+    double dt, gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, density_floor, Y_floor, pressure_floor, CFL,a, min_dt=1e-10;
+    int implicit_iternum;
+    bool var_gamma, implicit_solve_on, non_inertial_rf_on, mag_field_on, centrifugal_force_on, nuclear_burning_on;
     size_t steps, threads;
     double omega_ns;
     bool stop_check = false;
+    vector3d<double> omega0;
+
 
 public:
-    MUSCL_base(SurfaceMesh mesh, std::vector<std::vector<double>> U_in, int dim, double gam, double omega_ns_i, size_t threads_i) : MUSCL_base_geometry(mesh), U(U_in), gam(gam), dim(dim), omega_ns(omega_ns_i), threads(threads_i)
-    { // U_in should be n_faces * dim(=4)
+    MUSCL_base(SurfaceMesh mesh, std::vector<StateVec> U_in, double gam, double omega_ns_i, size_t threads_i) : MUSCL_base_geometry(mesh), U(U_in), gam(gam), omega_ns(omega_ns_i), threads(threads_i)
+    { // U_in should be n_faces * DIM(=4)
 
         double h0_temp;
 
@@ -50,17 +59,6 @@ public:
             flux_var_minus[i].resize(faces[i].size());
             U_plus[i].resize(faces[i].size());
             U_minus[i].resize(faces[i].size());
-            U_temp[i].resize(dim);
-            U_temp_1[i].resize(dim);
-            source_plus[i].resize(dim);
-
-            for (size_t j = 0; j < faces[i].size(); j++)
-            {
-                flux_var_plus[i][j].resize(dim);
-                flux_var_minus[i][j].resize(dim);
-                U_plus[i][j].resize(dim);
-                U_minus[i][j].resize(dim);
-            }
         }
 
         std::ifstream ifs("input/parameters.json");
@@ -70,6 +68,31 @@ public:
         var_gamma = parameters["var_gamma"];
         implicit_iternum = parameters["implicit_iternum"];
         implicit_solve_on = parameters["implicit_solve_on"];
+        non_inertial_rf_on = parameters["non_inertial_rf_on"];
+        mag_field_on = parameters["magnetic_field_on"];
+        centrifugal_force_on = parameters["centrifugal_force_on"];
+        a=parameters["a_isothermal"];
+        omega_ns = parameters["omega_ns"];
+        nuclear_burning_on = parameters["nuclear_burning_on"];
+
+
+
+
+        if(mag_field_on && DIM!=8){
+            std::cout<<"magnetic field on but DIM is not 8, check MUSCL_base.hpp \n";
+            stop_check=true;
+            exit(1);
+        }
+
+        if(nuclear_burning_on && DIM!=6){
+            std::cout<<"nuclear burning on but DIM is not 6, check MUSCL_base.hpp \n";
+            stop_check=true;
+            exit(1);
+        }
+        
+        omega0[0] = 0;
+        omega0[1] = 0;
+        omega0[2] = omega_ns;
 
         N = 1;   // very small face number to be changed
         h0 = 10; // very big length of an edge to be changed
@@ -122,6 +145,7 @@ public:
 
         density_floor = min_rho * 1e-9;
         pressure_floor = min_p * 1e-9;
+        Y_floor=0;
     };
 
 
@@ -141,10 +165,21 @@ public:
         {
             dt = h0 * CFL / max_vel;
         }
+        //std::cout<<"dt="<<dt<<" h0="<<h0 <<" max_vel="<<max_vel<<"\n";
+
         double extra_dt = extra_dt_constr();
+
 
         if (dt > extra_dt)
             dt = extra_dt;
+
+        if(dt<min_dt)
+        {
+            std::cout<<"dt is too small, simulation stopped \n";
+            stop_check=true;
+            exit(1);
+        }
+        
 
         if (implicit_solve_on)
         {
@@ -175,7 +210,7 @@ public:
             for (size_t i = 0; i < this->n_faces(); i++)
                 {
 
-                    for (size_t k = 0; k < dim; k++)
+                    for (size_t k = 0; k < DIM; k++)
                     {
                         U[i][k] = U_temp[i][k]+U[i][k]/2+U_temp_1[i][k];
                     }
@@ -191,7 +226,7 @@ public:
             for (size_t i = 0; i < nf; i++)
             {
 
-                for (size_t k = 0; k < dim; k++)
+                for (size_t k = 0; k < DIM; k++)
                 {
                     U_temp_1[i][k]=2*U[i][k];
                     U[i][k] += U_temp[i][k];
@@ -199,6 +234,12 @@ public:
 
                 if (U[i][0] < density_floor)
                     U[i][0] = density_floor; // density floor
+
+                if(DIM==6){
+                    if(U[i][5] < Y_floor)
+                        U[i][5] = Y_floor;
+                }
+
             }
 
             find_U_edges();
@@ -208,12 +249,17 @@ public:
             for (size_t i = 0; i < nf; i++)
             {
 
-                for (size_t k = 0; k < dim; k++)
+                for (size_t k = 0; k < DIM; k++)
                 {
                     U[i][k] += U_temp[i][k];
                 }
                 if (U[i][0] < density_floor)
                     U[i][0] = density_floor; // density floor
+
+                if(DIM==6){
+                    if(U[i][5] < Y_floor)
+                        U[i][5] = Y_floor;
+                }
             }
 
             
@@ -228,7 +274,7 @@ public:
                 for (size_t i = 0; i < nf; i++)
                 {
 
-                    for (size_t k = 0; k < dim; k++)
+                    for (size_t k = 0; k < DIM; k++)
                     {   
 
                         temp0+=U[i][k];
@@ -239,6 +285,7 @@ public:
                     }
                     if (U[i][0] < density_floor)
                         U[i][0] = density_floor; // density floor
+
                 }
                 //std::cout<<" Implicit iteration "<<iternum<<" diff= "<<temp0<<std::endl;
             }
@@ -256,7 +303,7 @@ public:
             for (size_t i = 0; i < nf; i++)
             {
 
-                for (size_t k = 0; k < dim; k++)
+                for (size_t k = 0; k < DIM; k++)
                 {
                     U[i][k] += U_temp[i][k];
                 }
@@ -272,12 +319,15 @@ public:
             for (size_t i = 0; i < nf; i++)
             {
 
-                for (size_t k = 0; k < dim; k++)
+                for (size_t k = 0; k < DIM; k++)
                 {
                     U[i][k] += U_temp[i][k];
                 }
                 if (U[i][0] < density_floor)
                     U[i][0] = density_floor; // density floor
+
+                //if(i==3729)
+                //    std::cout<<i<<" density ="<<U[i][0]<<"\n";
             }
         }
 
@@ -289,7 +339,7 @@ public:
         for (size_t i = 0; i < nf; i++)
         {
 
-            // for (size_t k = 0; k < dim; k++)
+            // for (size_t k = 0; k < DIM; k++)
             //{
             //     U[i][k] += U_temp[i][k]; // U=U+dt*phi(U+dt/2*phi(U))
             // }
@@ -335,6 +385,16 @@ public:
         return stop_check;
     }
 
+        bool get_m_field_on()
+    { // True = stop computations due to error
+        return mag_field_on;
+    }
+    bool get_nuclear_burning_on()
+    { // True = stop computations due to error
+        return nuclear_burning_on;
+    }
+
+
 protected:
     void res2d(double dt_here) // space step
     // takes data from U matrix
@@ -346,7 +406,7 @@ protected:
         size_t nf=this->n_faces();
         for (size_t i = 0; i < nf; i++)
         {
-            for (size_t k = 0; k < dim; k++) // source terms
+            for (size_t k = 0; k < DIM; k++) // source terms
                 U[i][k] = dt_here * source_plus[i][k];
 
             // int comp=3;
@@ -360,7 +420,7 @@ protected:
                 if (j == (faces[i].size() - 1))
                     j1 = 0;
 
-                for (size_t k = 0; k < dim; k++)
+                for (size_t k = 0; k < DIM; k++)
                 {
                     if (std::isnan((flux_var_minus[i][j][k])))
                     {
@@ -378,10 +438,10 @@ protected:
         }
     };
 
-    virtual std::vector<double> flux_star(std::vector<double>& ul, std::vector<double>& ur, int n_face, int n_edge) = 0;
-    virtual std::vector<double> limiter(std::vector<double>& u_r, int n_face, int n_edge) = 0;
-    virtual std::vector<double> source(std::vector<double>& u, int n_face) = 0;
-    virtual double make_gam(std::vector<double> &u, vector3d<double> &r) = 0;
+    virtual StateVec flux_star(StateVec& ul, StateVec& ur, int n_face, int n_edge) = 0;
+    virtual StateVec limiter(StateVec& u_r, int n_face, int n_edge) = 0;
+    virtual StateVec source(StateVec& u, int n_face) = 0;
+    virtual double make_gam(StateVec &u, vector3d<double> &r) = 0;
     virtual double extra_dt_constr() = 0;
     // virtual void set_analytical_solution();
 
@@ -397,7 +457,7 @@ private:
         {
             for (size_t j = 0; j < faces[i].size(); j++)
             {
-                for (size_t k = 0; k < dim; k++)
+                for (size_t k = 0; k < DIM; k++)
                 {
                     f1 = flux_var_plus[i][j][k] / (U_plus[i][j][k] - U[i][k]);
                     f2 = -flux_var_minus[i][j][k] / (U_minus[i][j][k] - U[i][k]);
@@ -418,8 +478,20 @@ private:
         double max, c, p, rho;
         max = 1e-8;
         double max_Mach = 0;
-        vector3d<double> R_vec, vel, l_vec;
+        vector3d<double> R_vec, vel, l_vec, fc_normed;
         size_t nf=this->n_faces();
+
+
+        double GM = 0.217909;
+        double g_eff;
+        double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
+        double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
+        double beta_switch = 0.5479; // switch point for initial function
+        double C_switch = beta_switch / (1 - beta_switch);
+        double beta, gam_0,C;
+        
+        gam_0=gam;
+
         for (size_t i = 0; i < nf; i++)
         {
             l_vec[0] = U[i][1];
@@ -427,15 +499,71 @@ private:
             l_vec[2] = U[i][3];
             rho = U[i][0];
 
+
             if (rho < density_floor)
             {
                 rho = density_floor;
                 U[i][0] = density_floor;
             }
-            vel = cross_product(face_centers[i] / face_centers[i].norm(), l_vec);
+
+            fc_normed = face_centers[i] / face_centers[i].norm();
+            vel = cross_product(fc_normed, l_vec);
             vel /= rho;
+
+            /*if(non_inertial_rf_on){
+                vel += cross_product(omega0, fc_normed);
+            }*/
+
+            g_eff = GM - vel.norm() * vel.norm();
             p = pressure_fc(U[i], i);
-            c_s = std::sqrt(gam * p / rho);
+
+            if(var_gamma){
+            C = 12. / 5 * k_m * rho / (3 * p) * pow(3. / 4 * c_sigma * g_eff * rho, 1. / 4);
+                if (C <= C_switch)
+                {
+                    beta = C / (1 + C);
+                }
+                else
+                {
+                    beta = 1 - pow(1 / C, 4);
+                }
+
+                double beta_ceil = 1 - 1e-9, beta_floor = 0;
+
+                if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
+                    beta = beta_ceil;
+
+                beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
+                beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
+
+                if (beta < beta_floor) // beta limitations
+                    beta = beta_floor;
+
+                if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
+                    beta = beta_ceil;
+                gam_0 = (10 - 3 * beta) / (8 - 3 * beta);
+            }
+
+            if(mag_field_on){
+            vector3d<double> B;
+                B[0] = U[i][5]; B[1] = U[i][2]; B[2] = U[i][7];
+
+                double B_mag = B.norm();
+                double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+                double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
+                double H = (2*gam-1)/(gam-1)*p/(rho*g_eff);
+
+
+                c_s=std::max(std::sqrt(gam_0 * p / rho), std::sqrt(B_mag * B_mag / (4*M_PI*rho*H)));
+
+            }else if(DIM==4){
+                c_s=a;
+
+            }else
+                {
+                c_s = std::sqrt(gam_0 * p / rho);
+
+            }
 
             if (vel.norm() > max)
             {
@@ -456,6 +584,7 @@ private:
         }
 
         max_vel = max;
+        //std::cout<<max<<"\n";
 
         // std::cout<< max_vel<< " " << max_Mach<<"\n";
     }
@@ -483,12 +612,14 @@ private:
         size_t nf=this->n_faces();
         for (size_t i = 0; i < nf; i++) // tag1
         {
-            U[i][4] = pressure_fc(U[i], i);
 
             U[i][0] -= rho_an[i];
-            U[i][4] -= p_an[i];
+
+            if(DIM!=4){
+                U[i][4] = pressure_fc(U[i], i);
+                U[i][4] -= p_an[i];
+            }
         }
-        // std::cout<<rho_an[0]<<" "<<p_an[0]<<"\n";
 
         omp_set_dynamic(0);           // Explicitly disable dynamic teams
         omp_set_num_threads(threads); // Use threads for all consecutive parallel regions
@@ -502,12 +633,12 @@ private:
                 int neighboor_num = neighbors_edge[i][j];
                 int j0 = std::find(neighbors_edge[neighboor_num].begin(), neighbors_edge[neighboor_num].end(), i) - neighbors_edge[neighboor_num].begin();
 
-                std::vector<double> pp = p_plus(i, j);
-                std::vector<double> pm = p_minus(i, j);
-                std::vector<double> r;
-                r.resize(dim);
+                StateVec pp = p_plus(i, j);
+                StateVec pm = p_minus(i, j);
+                StateVec r;
+                //r.resize(DIM);
 
-                for (size_t k = 0; k < dim; k++)
+                for (size_t k = 0; k < DIM; k++)
                 {
                     r[k] = pm[k] / pp[k];
 
@@ -515,8 +646,8 @@ private:
                     //     r[k]=0;
                 }
 
-                std::vector<double> lim = limiter(r, i, j);
-                for (size_t k = 0; k < dim; k++)
+                StateVec lim = limiter(r, i, j);
+                for (size_t k = 0; k < DIM; k++)
                 {
                     /*double kappa = (2 * lim[k] - (r[k] + 1)) / (r[k] + 1);
                     if (std::isnan(kappa))
@@ -547,13 +678,12 @@ private:
         }
     };
 
-    std::vector<double> U_H_plus(int n_face, int face_edge)
+    StateVec U_H_plus(int n_face, int face_edge)
     {
 
-        std::vector<double> res;
-        res.resize(dim);
+        StateVec res;
 
-        for (size_t U_element = 0; U_element < dim; U_element++)
+        for (size_t U_element = 0; U_element < DIM; U_element++)
         {
             res[U_element] = betas_plus[n_face][face_edge][0] * U[flux_faces_plus[n_face][face_edge][0]][U_element] +
                              betas_plus[n_face][face_edge][1] * U[flux_faces_plus[n_face][face_edge][1]][U_element];
@@ -562,12 +692,11 @@ private:
         return res;
     };
 
-    std::vector<double> U_H_minus(int n_face, int face_edge)
+    StateVec U_H_minus(int n_face, int face_edge)
     {
-        std::vector<double> res;
-        res.resize(dim);
+        StateVec res;
 
-        for (size_t U_element = 0; U_element < dim; U_element++)
+        for (size_t U_element = 0; U_element < DIM; U_element++)
         {
             res[U_element] = betas_minus[n_face][face_edge][0] * U[flux_faces_minus[n_face][face_edge][0]][U_element] +
                              betas_minus[n_face][face_edge][1] * U[flux_faces_minus[n_face][face_edge][1]][U_element];
@@ -576,12 +705,11 @@ private:
         return res;
     };
 
-    std::vector<double> p_plus(int n_face, int face_edge)
+    StateVec p_plus(int n_face, int face_edge)
     {
-        std::vector<double> res, Up;
-        res.resize(dim);
+        StateVec res, Up;
         Up = U_H_plus(n_face, face_edge);
-        for (size_t U_element = 0; U_element < dim; U_element++)
+        for (size_t U_element = 0; U_element < DIM; U_element++)
         {
             if (U_element == 0)
             {
@@ -601,12 +729,11 @@ private:
         return res;
     };
 
-    std::vector<double> p_minus(int n_face, int face_edge)
+    StateVec p_minus(int n_face, int face_edge)
     {
-        std::vector<double> res1, Um;
-        res1.resize(dim);
+        StateVec res1, Um;
         Um = U_H_minus(n_face, face_edge);
-        for (size_t U_element = 0; U_element < dim; U_element++)
+        for (size_t U_element = 0; U_element < DIM; U_element++)
         {
             if (U_element == 0)
             {
@@ -626,8 +753,13 @@ private:
         return res1;
     }
 
-    double pressure_fc(std::vector<double> &u, int n_face) // u[4] == energy
-    {                                                      // to do: make state_vector a class and turn this into a method
+    double pressure_fc(StateVec &u, int n_face) // u[4] == energy
+    {                   
+        
+        if(DIM==4){
+
+            return u[0]*a*a;
+        }        
         vector3d<double> l_vec, vel, r;
         // double pressure_floor = 1e-16;
         l_vec[0] = u[1];
@@ -646,9 +778,16 @@ private:
         vel = cross_product(r, l_vec);
         vel /= -u[0];
 
+        //if(non_inertial_rf_on)
+        //    vel += cross_product(omega0, r);
+        
+
         // double gam_0 = make_gam(u, r);
 
         double gam_0 = gam;
+        double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+        double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
+        double H=(2*gam_0-1)/(gam_0-1)*u[4]/(u[0]*g_eff);
 
         if (var_gamma)
         {
@@ -693,10 +832,27 @@ private:
         }
 
         // return (u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1) / gam; // v3 = compressed star + sin
-        return std::max(pressure_floor, (u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1)); // v4
+
+        //if(non_inertial_rf_on){
+        //    return std::max(pressure_floor,(u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1)); // v4 = compressed star new gamma
+            //return std::max(pressure_floor,(u[4] - u[0] * (vel.norm() * vel.norm() ) / 2) * (gam - 1)  - gam *omega_ns * omega_ns * std::sin(theta) * std::sin(theta)*u[0]/2);
+       //}
+        //else{
+
+        double res=(u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1);
+
+        if(mag_field_on){
+            vector3d<double> B;
+            B[0]=u[5]; B[1]=u[6]; B[2]=u[7];
+
+            res -= B.norm()*B.norm()/(8*M_PI*H)*(gam_0 - 1);
+        }
+
+
+        return std::max(pressure_floor, res); 
     }
 
-    double E_edge(std::vector<double> &u, int n_face, int n_edge) // u[4] == pressure
+    double E_edge(StateVec &u, int n_face, int n_edge) // u[4] == pressure
     {                                                             // because we reconstruct pressure on edge we needed new formula for beta
         vector3d<double> l_vec, vel, r;
 
@@ -714,12 +870,20 @@ private:
         vel = cross_product(r, l_vec);
         vel /= (-u[0]);
 
+        double theta = std::acos(r[2]);
+
+        //if(non_inertial_rf_on)
+        //vel += cross_product(omega0, r);
+
         double gam_0 = gam;
+
+        double GM = 0.217909;
+        double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
+        double H=(2*gam_0-1)/(gam_0-1)*u[4]/(u[0]*g_eff);
 
         if (var_gamma)
         {
-            double GM = 0.217909;
-            double g_eff = GM - vel.norm() * vel.norm();
+
             double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
             double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
             // new expression for C
@@ -728,6 +892,9 @@ private:
             double C_switch = -1 - 1 / (beta_switch - 1);
             double beta;
 
+
+
+    
             if (C <= C_switch)
             {
                 beta = 1 - 1 / (1 + C);
@@ -754,6 +921,20 @@ private:
             gam_0 = (10 - 3 * beta) / (8 - 3 * beta);
         }
 
-        return 1 / (gam_0 - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2;
+        //if(non_inertial_rf_on){
+        //return 1 / (gam_0 - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2 +gam_0/(gam_0 - 1)* omega_ns * omega_ns * std::sin(theta) * std::sin(theta)*u[0]/2;
+        //return 1 / (gam_0 - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2 +omega_ns * omega_ns * std::sin(theta) * std::sin(theta)*u[0]/2;
+        //}
+        //else{
+
+        double res=1 / (gam_0 - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2;
+        if(mag_field_on){
+        vector3d<double> B;
+        B[0]=u[5]; B[1]=u[6]; B[2]=u[7];
+        res+=B.norm()*B.norm()/(8*M_PI*H);
+        }
+
+        return res;
+        //}
     }
 };

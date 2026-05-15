@@ -8,21 +8,19 @@ class MUSCL_HLLE_p : public adiabatic
 
 
 public:
-    MUSCL_HLLE_p(SurfaceMesh mesh, std::vector<std::vector<double>> U_in, 
-    int dim, double gam, double omega_ns_i, bool accretion_on_i, size_t threads)
-        :adiabatic(mesh, U_in, dim, gam, omega_ns_i,accretion_on_i, threads){}
+    MUSCL_HLLE_p(SurfaceMesh mesh, std::vector<StateVec> U_in, double gam, double omega_ns_i, bool accretion_on_i, size_t threads)
+        :adiabatic(mesh, U_in, gam, omega_ns_i,accretion_on_i, threads){}
 
 
 
 protected:
-    
-    std::vector<double> flux_star(std::vector<double> ul, std::vector<double> ur, int n_face, int n_edge)
+
+    StateVec flux_star(StateVec ul, StateVec ur, int n_face, int n_edge)
     {
 
-        std::vector<double> FL, FR, F, c_vel;
+        StateVec FL, FR, F;
+        std::array<double, 2> c_vel;
         double S_R, S_L;
-
-        F.resize(dim);
 
         c_vel = char_vel(ul, ur, n_face, n_edge);
         S_L = c_vel[0];
@@ -38,7 +36,7 @@ protected:
         else if (S_L < 0 && S_R > 0)
         {
 
-            for (size_t i = 0; i < dim; i++)
+            for (size_t i = 0; i < DIM; i++)
             {
                 F[i] = (S_R * FL[i] - S_L * FR[i] + S_R * S_L * (ur[i] - ul[i])) / (S_R - S_L);
             }

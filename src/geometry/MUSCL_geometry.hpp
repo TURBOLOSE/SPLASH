@@ -103,6 +103,7 @@ public:
                     neighbors[i].push_back((face_in).idx());
                 }
             }
+
             i++;
         }
 
@@ -1117,6 +1118,36 @@ public:
         }
         outfile.close();
     };
+
+    void write_neighbors_edge()
+    {
+
+        std::ofstream outfile;
+        outfile.open("results/neighbors_edge.dat", std::ios::out);
+        for (auto neighbor : neighbors_edge)
+        {
+            for (auto neighbor_element : neighbor)
+            {
+                outfile << neighbor_element << " ";
+            }
+            outfile << "\n";
+        }
+    };
+    void write_neighbors()
+    {
+
+        std::ofstream outfile;
+        outfile.open("results/neighbors.dat", std::ios::out);
+        for (auto neighbor : neighbors)
+        {
+            for (auto neighbor_element : neighbor)
+            {
+                outfile << neighbor_element << " ";
+            }
+            outfile << "\n";
+        }
+    };
+    
 
     void print_neighbors_edge()
     {

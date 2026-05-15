@@ -7,20 +7,19 @@ using json = nlohmann::json;
 
 class adiabatic : public MUSCL_base
 {
-
+//StateVec
 protected:
     std::vector<double> betas;
-    std::ofstream outfile, outfile_p, outfile_omega, outfile_curl, outfile_beta, outfile_mach;
-    std::ofstream outfile_l[3];
+    std::ofstream outfile, outfile_p, outfile_omega, outfile_curl, outfile_beta, outfile_mach, outfile_Y;
+    std::ofstream outfile_l[3], outfile_B[3];
     bool accretion_on, friction_on, smooth_acc_on, extra_heat_on;
     double total_mass, acc_rate, e_acc, omega_acc_abs, tilt_angle, acc_width, area_coeff, alpha, t_acc, extra_heat_power;
     double en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o;
 
 
 public:
-    adiabatic(SurfaceMesh mesh, std::vector<std::vector<double>> U_in,
-              int dim, double gam, double omega_ns_i, bool accretion_on_i, size_t threads)
-        : MUSCL_base(mesh, U_in, dim, gam, omega_ns_i, threads), accretion_on(accretion_on_i)
+    adiabatic(SurfaceMesh mesh, std::vector<StateVec> U_in, double gam, double omega_ns_i, bool accretion_on_i, size_t threads)
+        : MUSCL_base(mesh, U_in, gam, omega_ns_i, threads), accretion_on(accretion_on_i)
     {
 
         en_gain_acc_o=0; en_loss_fall_o=0; en_loss_fric_o=0; en_loss_rad_o=0;
@@ -32,12 +31,14 @@ public:
         betas.resize(nf);
 
         set_analytical_solution();
-        if (dim != 5)
+        if (DIM != 5 && DIM != 8 && DIM != 6)
         {
-            std::cout << "check dim \n";
+            std::cout << "check DIM \n";
             stop_check = true;
             exit(1);
         }
+
+
 
         // clean file and append next line
         outfile.open("results/rho.dat", std::ios::out | std::ios::trunc);
@@ -64,7 +65,13 @@ public:
         outfile_mach.close();
         outfile_mach.open("results/mach.dat", std::ios::out | std::ios::app);
 
+        outfile_Y.open("results/Y.dat", std::ios::out | std::ios::trunc);
+        outfile_Y.close();
+        outfile_Y.open("results/Y.dat", std::ios::out | std::ios::app);
+
         std::string adrs[] = {"results/Lx.dat", "results/Ly.dat", "results/Lz.dat"};
+        std::string adrs_B[] = {"results/Bx.dat", "results/By.dat", "results/Bz.dat"};
+
 
         for (size_t i=0; i < 3; i++)
         {
@@ -72,6 +79,11 @@ public:
             outfile_l[i].open(adrs[i], std::ios::out | std::ios::trunc);
             outfile_l[i].close();
             outfile_l[i].open(adrs[i], std::ios::out | std::ios::app);
+
+
+            outfile_B[i].open(adrs_B[i], std::ios::out | std::ios::trunc);
+            outfile_B[i].close();
+            outfile_B[i].open(adrs_B[i], std::ios::out | std::ios::app);
         }
 
         std::ifstream ifs("input/parameters.json");
@@ -87,8 +99,7 @@ public:
         smooth_acc_on = parameters["smooth_acc_on"];
         t_acc=parameters["t_acc"];
         extra_heat_on = parameters["extra_heat_on"];
-        extra_heat_power=parameters["extra_heat_power"];    
-
+        extra_heat_power=parameters["extra_heat_power"];
 
         area_coeff = 0;
         double mu = M_PI / 2;
@@ -124,13 +135,31 @@ public:
     void write_t_rho()
     {
         outfile << this->time() << "  ";
-        for (const auto& U_i : U)
+        // for (const auto& U_i : U)
+        // {
+        size_t nf=this->n_faces();
+        for (size_t n_face = 0; n_face < nf; n_face++)
         {
 
-            outfile << U_i[0] << " ";
+            // if(U[n_face][0]>14)
+            // std::cout<<n_face<<" density ="<<U[n_face][0]<<"\n";
+            outfile << U[n_face][0] << " ";
             // out_lc<< U_i[0] << " ";
         }
         outfile << "\n";
+    };
+
+        void write_t_Y()
+    {
+        outfile_Y << this->time() << "  ";
+        size_t nf=this->n_faces();
+        for (size_t n_face = 0; n_face < nf; n_face++)
+        {
+
+
+            outfile_Y << U[n_face][5] << " ";
+        }
+        outfile_Y << "\n";
     };
 
     void write_t_betas()
@@ -250,6 +279,22 @@ public:
         }
     };
 
+    void write_t_B()
+    {
+        for (size_t i=0; i < 3; i++)
+        {
+
+            outfile_B[i] << this->time() << "  ";
+            for (auto U_j : U)
+            {
+                // outfile_l[i].flush()
+                outfile_B[i] << U_j[i + 5] << " ";
+                // out_lc<< U_i[0] << " ";
+            }
+            outfile_B[i] << "\n";
+        }
+    };
+
     void write_t_omega_z()
     {
         vector3d<double> vel, l_vec, rxV;
@@ -320,37 +365,70 @@ public:
             vel = cross_product(face_centers[n_face] / face_centers[n_face].norm(), l_vec);
             vel /= (-U[n_face][0]);
             PI = pressure(U[n_face], vel, face_centers[n_face] / face_centers[n_face].norm());
+            double E=PI;
+
+            if(nuclear_burning_on && DIM==6){
+
+                double Q0=5.3e21;
+                //double rho5=U[n_face][0]*100;
+                double kappa0=3.4e6; //opacity 0.34 cm^2/g
+                double y=1; //col depth test
+                double m_alpha=6.65e-24; // mass of alpha particle in g
+                double k_b=1.3807e-16; // Boltzmann constant in erg/K
+                double c=3e10; // speed of light in cm/s
+                double a=11e5; //radius in cm
+                double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); //
+                double eps_alpha=5.84e17; // erg/cm^3
+
+                double rho5=g*U[n_face][0]*U[n_face][0]*1e14/(gam*PI*9e27)/1e5; // density in 10^5 g/cm^3
+
+
+                double T8=m_alpha/k_b * pow(PI *9e27,2)/(g*pow(U[n_face][0]*1e7,3))/1e8; // temperature in 10^8 K
+                //std::cout<<T8<<"\n";
+
+                double Q=a*c*pow(T8*1e8,4)/(3*kappa0*y); //cgs units
+
+
+                double dQ_dt =Q*U[n_face][0]/9e27*3.3e-5; //back to code units * sigma
+                
+
+                E=dQ_dt;
+                //if(dt_new> std::abs(10* U[i][4]/dQ_dt))
+                 //   dt_new=std::abs(10* U[i][4]/dQ_dt);
+
+            }
+            
 
             if (phi_fc < M_PI / 2 && phi_fc > -M_PI / 2)
             {
                 d_vec = dot_product(obs_vector_0, face_centers[n_face] / face_centers[n_face].norm());
                 cos_alpha = std::abs(d_vec) / obs_vector_0.norm();
-                flux_tot_0 += PI * cos_alpha * surface_area[n_face];
-                // flux_tot_0+=E*cos_alpha*surface_area[n_face];
+                //flux_tot_0 += PI * cos_alpha * surface_area[n_face];
+                 flux_tot_0+=E*cos_alpha*surface_area[n_face];
             }
 
             if (theta_fc < M_PI / 2)
             {
                 d_vec = dot_product(obs_vector_90, face_centers[n_face] / face_centers[n_face].norm());
                 cos_alpha = std::abs(d_vec) / obs_vector_90.norm();
-                flux_tot_90 += PI * cos_alpha * surface_area[n_face];
-                // flux_tot_90+=E*cos_alpha*surface_area[n_face];
+                //flux_tot_90 += PI * cos_alpha * surface_area[n_face];
+                 flux_tot_90+=E*cos_alpha*surface_area[n_face];
             }
 
             if (dot_product(obs_vector_45, face_centers[n_face] / face_centers[n_face].norm()) > 0)
             {
                 d_vec = dot_product(obs_vector_45, face_centers[n_face] / face_centers[n_face].norm());
                 cos_alpha = std::abs(d_vec) / obs_vector_45.norm();
-                flux_tot_45 += PI * cos_alpha * surface_area[n_face];
-                // flux_tot_45+=E*cos_alpha*surface_area[n_face];
+                //flux_tot_45 += PI * cos_alpha * surface_area[n_face];
+                flux_tot_45+=E*cos_alpha*surface_area[n_face];
             }
 
             if (theta_fc > M_PI / 2)
             {
                 d_vec = dot_product(obs_vector_180, face_centers[n_face] / face_centers[n_face].norm());
                 cos_alpha = std::abs(d_vec) / obs_vector_180.norm();
-                flux_tot_180 += PI * cos_alpha * surface_area[n_face];
-                // flux_tot_180+=E*cos_alpha*surface_area[n_face];
+                //flux_tot_180 += PI * cos_alpha * surface_area[n_face];
+                flux_tot_180+=E*cos_alpha*surface_area[n_face];
             }
         }
 
@@ -377,7 +455,7 @@ public:
         size_t nf=this->n_faces();
         for (size_t n_face = 0; n_face < nf; n_face++)
         {
-            for (size_t j = 0; j < dim; j++)
+            for (size_t j = 0; j < DIM; j++)
             {
                 out_final << U[n_face][j] << " ";
             }
@@ -387,13 +465,13 @@ public:
 
 protected:
     // U = {rho, l1, l2, l3, E}
-    std::vector<double> flux(std::vector<double>& u_in, int n_face, int n_edge)
+    StateVec flux(StateVec& u_in, int n_face, int n_edge)
     {
 
-        std::vector<double> res;
-        res.resize(dim);
+        StateVec res;
         double PI, ndv, L, A, R;
-        vector3d<double> vel, l_vec, nxR, edge_center;
+        double mu0=1;
+        vector3d<double> vel, l_vec, nxR, edge_center,B,nxB;
 
         // R = face_centers[n_face].norm();
 
@@ -414,6 +492,8 @@ protected:
         vel /= (-u_in[0]) * edge_center.norm();
 
 
+        double theta = std::acos(edge_center[2] / edge_center.norm());
+
         if(vel.norm()>1){
             stop_check=true;
             std::cout<<"superluminal vel in flux calculation: "<<vel.norm()<<"\n";           
@@ -421,23 +501,58 @@ protected:
 
         // PI = (u_in[4] - u_in[0] * vel.norm() * vel.norm() / 2.) * (gam - 1);
         PI = pressure(u_in, vel, edge_center);
+
+
+        double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+        double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
+        double H = (2*gam-1)/(gam-1)*PI/(u_in[0]*g_eff);
+
+
+        if(mag_field_on){
+            B[0]=u_in[5]; B[1]=u_in[6]; B[2]=u_in[7];
+            nxB=cross_product(edge_center, B);
+            PI+=B.norm()*B.norm()/(8*M_PI);
+        }
+
         ndv = dot_product(edge_normals[n_face][n_edge], vel);
         nxR = cross_product(edge_normals[n_face][n_edge], (edge_center / edge_center.norm()));
 
-        double theta = std::acos(edge_center[2] / edge_center.norm());
 
-        res[0] = u_in[0] * dot_product(vel, edge_normals[n_face][n_edge]);
-        res[1] = (u_in[1] * ndv - nxR[0] * PI);
-        res[2] = (u_in[2] * ndv - nxR[1] * PI);
-        res[3] = (u_in[3] * ndv - nxR[2] * PI);
-        res[4] = (u_in[4] + PI) * dot_product(vel, edge_normals[n_face][n_edge]);
+        if(non_inertial_rf_on && centrifugal_force_on)
+            PI-=u_in[0]*omega_ns * omega_ns * std::sin(theta) * std::sin(theta)/2;
+
+        res[0] = u_in[0] * ndv;
+
+    
+        if(mag_field_on){
+            res[1]=(u_in[1] * ndv - nxR[0] * (PI)+nxB[0]*B.norm()/(8*M_PI*H));
+            res[2]=(u_in[2] * ndv - nxR[1] * (PI)+nxB[1]*B.norm()/(8*M_PI*H));
+            res[3]=(u_in[3] * ndv - nxR[2] * (PI)+nxB[2]*B.norm()/(8*M_PI*H));
+            res[4] = (u_in[4] + PI) * ndv
+            - dot_product(B, vel)*dot_product(B, edge_normals[n_face][n_edge])/mu0/H;
+
+            res[5]=(vel[1]*B[0]-B[1]*vel[0])*edge_normals[n_face][n_edge][1]/H+(vel[2]*B[0]-B[2]*vel[0])*edge_normals[n_face][n_edge][2]/H;
+            res[6]=(vel[0]*B[1]-B[0]*vel[1])*edge_normals[n_face][n_edge][0]/H+(vel[2]*B[1]-B[2]*vel[1])*edge_normals[n_face][n_edge][2]/H;
+            res[7]=(vel[0]*B[2]-B[0]*vel[0])*edge_normals[n_face][n_edge][0]/H+(vel[1]*B[2]-B[1]*vel[0])*edge_normals[n_face][n_edge][1]/H;
+        }else{
+            res[1] = (u_in[1] * ndv - nxR[0] * PI);
+            res[2] = (u_in[2] * ndv - nxR[1] * PI);
+            res[3] = (u_in[3] * ndv - nxR[2] * PI);
+           // res[1] = 0;
+           // res[2] = 0;
+           // res[3] = 0;
+            res[4] = (u_in[4] + PI) * ndv;
+        }
+
+        if(nuclear_burning_on)
+            res[5]=u_in[0] * u_in[5] * ndv; //Sigma Y transfer
 
         return res;
     }
 
-    virtual std::vector<double> flux_star(std::vector<double>& ul, std::vector<double>& ur, int n_face, int n_edge) = 0;
+    virtual StateVec flux_star(StateVec& ul, StateVec& ur, int n_face, int n_edge) = 0;
 
-    std::vector<double> source(std::vector<double>& u, int n_face)
+    StateVec source(StateVec& u, int n_face)
     { // du/dt
       // due to the weird reconstruction algorithm, u[4] here is the pressure \Pi
       // source should still return vector where res[4]=dE/dt
@@ -446,12 +561,13 @@ protected:
         static double en_gain_acc, en_loss_fall, en_loss_fric, en_loss_rad;
         static double total_mass_gain = 0, total_mass_gain_old = 0;
         static double total_mass_loss = 0;
-        std::vector<double> res;
-        res.resize(dim);
-        vector3d<double> l_vec, vel, vel_dot, omega_acc, omxr, rxv, fc_normed, l_fr, wr, vel0, omega0;
+        StateVec res;
+        vector3d<double> l_vec, vel, vel_dot, omega_acc, omxr, rxv, fc_normed, l_fr, wr, vel0, omxv, rxomxv, omxomxr, rxomxomxr,B;
 
-        for (size_t i = 0; i < dim; i++)
+        for (size_t i = 0; i < DIM; i++)
             res[i] = 0;
+
+
 
         l_vec[0] = u[1];
         l_vec[1] = u[2];
@@ -460,6 +576,23 @@ protected:
         fc_normed = face_centers[n_face] / face_centers[n_face].norm();
         vel = cross_product(fc_normed, l_vec);
         vel /= (-u[0]);
+
+        omxomxr=cross_product(omega0,cross_product(omega0, fc_normed));
+        double dv_cor=dot_product(vel, omxomxr);
+        omxv = cross_product(omega0, vel);
+        
+
+
+        //if(non_inertial_rf_on)
+        //    vel += cross_product(omega0, fc_normed);
+
+        //if(l_vec.norm()>1e-8)
+        //std::cout<<l_vec.norm()<<"\n";
+
+                
+        /*if(non_inertial_rf_on){
+            vel += cross_product(omega0, fc_normed);
+        }*/
 
          if(vel.norm()>1){
             stop_check=true;
@@ -490,30 +623,35 @@ protected:
         double C_switch = beta_switch / (1 - beta_switch);
         double beta, gam_0;
 
-        if (C <= C_switch)
-        {
-            beta = C / (1 + C);
+        if(var_gamma){
+            if (C <= C_switch)
+            {
+                beta = C / (1 + C);
+            }
+            else
+            {
+                beta = 1 - pow(1 / C, 4);
+            }
+
+            double beta_ceil = 1 - 1e-9, beta_floor = 0;
+
+            if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
+                beta = beta_ceil;
+
+            beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
+            beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
+
+            if (beta < beta_floor) // beta limitations
+                beta = beta_floor;
+
+            if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
+                beta = beta_ceil;
+            gam_0 = (10 - 3 * beta) / (8 - 3 * beta);
         }
-        else
-        {
-            beta = 1 - pow(1 / C, 4);
+        else{
+            beta=1;
+            gam_0=gam;
         }
-
-        double beta_ceil = 1 - 1e-9, beta_floor = 0;
-
-        if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
-            beta = beta_ceil;
-
-        beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
-        beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
-
-        if (beta < beta_floor) // beta limitations
-            beta = beta_floor;
-
-        if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
-            beta = beta_ceil;
-        gam_0 = (10 - 3 * beta) / (8 - 3 * beta);
-
         betas[n_face] = beta;
 
         /*double gam_0;
@@ -523,8 +661,75 @@ protected:
         }
         gam_0 = 2 - 1 / gam_0; // 2d ver*/
 
-        double adj_coeff = 1.00045; // just in case of small mass error
 
+        if(non_inertial_rf_on){ //centr + coriolis forces
+
+            /*rxomxomxr=cross_product(fc_normed, omxomxr);
+            res[1] -= u[0]*rxomxomxr[0];
+            res[2] -= u[0]*rxomxomxr[1];
+            res[3] -= u[0]*rxomxomxr[2];*/
+
+            rxomxv = cross_product(fc_normed, omxv);
+            res[1] = -2*u[0]*rxomxv[0];
+            res[2] = -2*u[0]*rxomxv[1];
+            res[3] = -2*u[0]*rxomxv[2];
+
+
+            // const double theta_c=M_PI/4;
+            // const double phi_c=M_PI/4;
+            // const double R0=2./11;
+            // //const double R0=2./5;
+            // //const double R0=0.15;
+            // //const double heatpwr=5e-5;
+            // //const double heatpwr=2e-4;
+            // //const double heatpwr=2e-3;
+            // //const double heatpwr=4e-4;
+            // //const double heatpwr=8e-4;
+
+
+
+            // const double heatpwr=8e-3;
+
+            // //Gaussian heat source for test
+            // double lon=-theta+M_PI/2;
+            // //np.arccos(np.sin(theta_c)*np.sin(lon)+np.cos(lon)*np.cos(theta_c)*np.cos(phi-phi_c))
+            // double r=2*std::acos(std::sin(theta_c)*std::sin(lon)+std::cos(lon)*std::cos(theta_c)*std::cos(phi-phi_c));
+            
+
+
+
+        }
+
+        if(nuclear_burning_on && DIM==6){
+
+            double Q0=5.3e21;
+            double kappa0=3.4e6; //opacity 0.34 cm^2/g
+            double y=1e8; //col depth test
+            double m_alpha=6.65e-24; // mass of alpha particle in g
+            double k_b=1.3807e-16; // Boltzmann constant in erg/K
+            double c=3e10; // speed of light in cm/s
+            double a=11e5; //radius in cm
+            double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); 
+            double eps_alpha=5.84e17; // erg/cm^3
+
+            double rho5=g*u[0]*u[0]*1e14/(gam*u[4]*9e27)/1e5; // density in 10^5 g/cm^3
+
+
+            double T8=m_alpha/k_b * pow(u[4]*9e27,2)/(g*pow(u[0]*1e7,3))/1e8; // temperature in 10^8 K
+            //std::cout<<T8<<"\n";
+
+            double Q=Q0*rho5*rho5*pow(u[5],3)/pow(T8,3)*exp(-44.027/T8) - a*c*pow(T8*1e8,4)/(3*kappa0*y); //cgs units
+            
+            res[4]+=Q*u[0]/9e27*3.3e-5; //back to code units * sigma
+
+            //res[5]+=Q*3*m_alpha/eps_alpha;
+            res[5]-=Q0*rho5*rho5*pow(u[5],3)/pow(T8,3)*exp(-44.027/T8)*3*m_alpha/eps_alpha*u[0];
+
+
+        }
+
+
+        double adj_coeff = 1.00045; // just in case of small mass error
         if (accretion_on)
         {
             
@@ -537,13 +742,13 @@ protected:
                 else
                 {
 
-                    res[0] = adj_coeff * 1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
+                    res[0] += adj_coeff * 1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
                         std::exp(-(theta_acc - mu) * (theta_acc - mu) / (2 * sigma * sigma));
                 }
             }
             else{
 
-            res[0] = adj_coeff * 1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
+            res[0] += adj_coeff * 1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
                      std::exp(-(theta_acc - mu) * (theta_acc - mu) / (2 * sigma * sigma));
             }
 
@@ -556,10 +761,10 @@ protected:
             omxr = cross_product(omega_acc, fc_normed);
             rxv = cross_product(fc_normed, omxr);
 
-            res[1] = res[0] * rxv[0];
-            res[2] = res[0] * rxv[1];
-            res[3] = res[0] * rxv[2];
-            res[4] = res[0] * (e_acc + ((omxr - vel).norm() * (omxr - vel).norm()) / 2.);
+            res[1] += res[0] * rxv[0];
+            res[2] += res[0] * rxv[1];
+            res[3] += res[0] * rxv[2];
+            res[4] += res[0] * (e_acc + ((omxr - vel).norm() * (omxr - vel).norm()) / 2.);
 
             total_mass_gain += res[0] * surface_area[n_face];
 
@@ -607,9 +812,6 @@ protected:
             double gam3d = 1 / (2 - gam_0);
             double rho = gam3d / (2 * gam3d - 1) * g_eff * u[0] * u[0] / u[4];
 
-            omega0[0] = 0;
-            omega0[1] = 0;
-            omega0[2] = omega_ns;
             vel0 = cross_product(omega0, fc_normed);
 
             wr = (vel - vel0);
@@ -693,12 +895,10 @@ protected:
             //crutch to avoid high mach
         }
 
-
-
         return res;
     };
 
-    double make_beta(std::vector<double> &u, vector3d<double> &r)
+    double make_beta(StateVec &u, vector3d<double> &r)
     {
 
         vector3d<double> l_vec, vel, r_normed;
@@ -709,6 +909,12 @@ protected:
         r_normed = r / r.norm();
         vel = cross_product(r_normed, l_vec);
         vel /= (-u[0]);
+
+
+                
+        /*if(non_inertial_rf_on){
+            vel += cross_product(omega0, r_normed);
+        }*/
 
         double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
         double g_eff = GM - vel.norm() * vel.norm();
@@ -750,7 +956,7 @@ protected:
         return beta;
     }
 
-    double make_gam(std::vector<double> &u, vector3d<double> &r)
+    double make_gam(StateVec &u, vector3d<double> &r)
     {
 
         if (var_gamma)
@@ -812,7 +1018,10 @@ protected:
                
                 double theta_acc = std::acos(fc_normed[1] * std::sin(tilt_angle) + fc_normed[2] * std::cos(tilt_angle));
                 
-               
+                /*if(non_inertial_rf_on){
+                vel += cross_product(omega0, fc_normed);
+                }*/
+                            
 
                 if (accretion_on)
                 {
@@ -895,6 +1104,38 @@ protected:
                     
                     
                 }
+
+
+
+            if(nuclear_burning_on && DIM==6){
+
+                double Q0=5.3e21;
+                //double rho5=U[i][0]*100;
+                double kappa0=3.4e6; //opacity 0.34 cm^2/g
+                double y=1; //col depth test
+                double m_alpha=6.65e-24; // mass of alpha particle in g
+                double k_b=1.3807e-16; // Boltzmann constant in erg/K
+                double c=3e10; // speed of light in cm/s
+                double a=11e5; //radius in cm
+                double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); //
+                double eps_alpha=5.84e17; // erg/cm^3
+
+
+                double rho5=g*U[i][0]*U[i][0]*1e14/(gam*press*9e27)/1e5; // density in 10^5 g/cm^3
+
+
+                double T8=m_alpha/k_b * pow(press *9e27,2)/(g*pow(U[i][0]*1e7,3))/1e8; // temperature in 10^8 K
+                //std::cout<<T8<<"\n";
+
+                double Q=Q0*rho5*rho5*pow(U[i][5],3)/pow(T8,3)*exp(-44.027/T8) - a*c*pow(T8*1e8,4)/(3*kappa0*y); //cgs units
+
+
+                double dQ_dt =Q*U[i][0]/9e27*3.3e-5; //back to code units * sigma
+
+                //if(dt_new> std::abs(10* U[i][4]/dQ_dt))
+                 //   dt_new=std::abs(10* U[i][4]/dQ_dt);
+
+            }
             
         }
         
@@ -910,7 +1151,7 @@ protected:
         return dt_new;
     }
 
-    double pressure(std::vector<double> u, vector3d<double> vel, vector3d<double> r)
+    double pressure(StateVec u, vector3d<double> vel, vector3d<double> r)
     {
 
         // double gam_0=gam;// older ver
@@ -918,18 +1159,44 @@ protected:
         double theta = std::acos(r[2] / r.norm());
         //double pressure_floor = 1e-16;
         double gam_0 = make_gam(u, r);
+                
+        double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+        double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
+        double H=(2*gam_0-1)/(gam_0-1)*u[4]/(u[0]*g_eff);
 
+        /*if(non_inertial_rf_on){
+            vel += cross_product(omega0, r/r.norm());
+        }*/
         // return  (u[4] - u[0] * vel.norm() * vel.norm() / 2) * (gam - 1); //v1 = uncompressed
         // return (u[4] - u[0] * vel.norm() * vel.norm() / 2) * (gam - 1) / gam; // v2 = different P
         // return (u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1) / gam; // v3 = compressed star + sin
         // return std::max(pressure_floor,(u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1)); // v4 = compressed star new gamma
-        return std::max(pressure_floor, (u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1)); // v4 = compressed star new gamma
+
+        // if(non_inertial_rf_on)
+        // {
+        //     return std::max(pressure_floor,(u[4] - u[0] * (vel.norm() * vel.norm() - omega_ns * omega_ns * std::sin(theta) * std::sin(theta)) / 2) * (gam - 1)); // v4 = compressed star new gamma
+        //     //return std::max(pressure_floor,(u[4] - u[0] * (vel.norm() * vel.norm() ) / 2) * (gam - 1)  - gam *omega_ns * omega_ns * std::sin(theta) * std::sin(theta)*u[0]/2);
+        // }
+        // else
+        // {
+
+        double res=(u[4] - u[0] * (vel.norm() * vel.norm()) / 2*H) * (gam_0 - 1);
+
+        if(mag_field_on){
+            vector3d<double> B;
+            B[0]=u[5]; B[1]=u[6]; B[2]=u[7];
+
+            res -= B.norm()*B.norm()/(8*M_PI)*(gam_0 - 1);
+        }
+
+            return std::max(pressure_floor, res); // v4 = compressed star new gamma
+        //}
     }
 
-    std::vector<double> char_vel(std::vector<double> u_L, std::vector<double> u_R, int n_face, int n_edge)
+    std::array<double, 2> char_vel(StateVec u_L, StateVec u_R, int n_face, int n_edge)
     {
         // returns vector {S_L, S_R}
-        std::vector<double> res;
+        std::array<double, 2> res;
         double a_L, a_R, S_L, S_R, p_L, p_R, q_R, q_L;
         vector3d<double> vel_r, vec_r, vel_l, vec_l, edge_center_l, edge_center_r;
 
@@ -938,6 +1205,8 @@ protected:
         {
             n_edge_1 = 0;
         }
+
+
 
         edge_center_r = (vertices[faces[n_face][n_edge]] + vertices[faces[n_face][n_edge_1]]) / 2.;
         edge_center_l = (vertices[faces[n_face][n_edge]] + vertices[faces[n_face][n_edge_1]]) / 2.;
@@ -959,14 +1228,24 @@ protected:
         vel_r = cross_product(edge_center_r, vec_r);
         vel_r /= (-u_R[0]) * edge_center_r.norm();
 
+
+
+
         // p_L = (u_L[4] - u_L[0] * vel_l.norm() * vel_l.norm() / 2) * (gam - 1);
         // p_R = (u_R[4] - u_R[0] * vel_r.norm() * vel_r.norm() / 2) * (gam - 1);
 
         p_L = pressure(u_L, vel_l, edge_center_l);
         p_R = pressure(u_R, vel_r, edge_center_r);
 
+
+        // if(non_inertial_rf_on){
+        //     vel_l += cross_product(omega0, edge_center_l);
+        //     vel_r += cross_product(omega0, edge_center_r);
+        // }
+
         double gam_L = gam;
         double gam_R = gam;
+
 
         double z = (gam - 1) / (2 * gam);
 
@@ -977,9 +1256,45 @@ protected:
             z = ((gam_L + gam_R) / 2. - 1) / (2 * (gam_L + gam_R) / 2.);
         }
 
-        a_L = std::sqrt(gam_L * p_L / u_L[0]);
-        a_R = std::sqrt(gam_R * p_R / u_R[0]);
 
+
+
+
+        if(mag_field_on){
+            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+            double g_eff_L = std::max(GM - vel_l.norm() * vel_l.norm(),0.);
+            double H_L = (2*gam-1)/(gam_L-1)*p_L/(u_L[0]*g_eff_L);
+            double g_eff_R = std::max(GM - vel_r.norm() * vel_r.norm(),0.);
+            double H_R = (2*gam-1)/(gam_R-1)*p_R/(u_R[0]*g_eff_R);
+
+            vector3d<double> B_L, B_R;
+            B_L[0] = u_L[5]; B_L[1] = u_L[2]; B_L[2] = u_L[7];
+            B_R[0] = u_R[5]; B_R[1] = u_R[6]; B_R[2] = u_R[7];
+
+            double B_n_L = dot_product(B_L, edge_normals[n_face][n_edge]);
+            double B_n_R = dot_product(B_R, edge_normals[n_face][n_edge]);
+            double B_mag_L = B_L.norm();
+            double B_mag_R = B_R.norm();
+
+            double mu0 = 1.0;  // Check units in your system
+
+            double a2_L = gam_L * p_L / u_L[0];
+            double c_A2_L = B_mag_L * B_mag_L / (4*M_PI*u_L[0]*H_L);
+            double c_fast_L = std::sqrt(0.5 * (a2_L + c_A2_L + 
+                        std::sqrt((a2_L + c_A2_L)*(a2_L + c_A2_L) - 4*a2_L*B_n_L*B_n_L/u_L[0])));
+
+            double a2_R = gam_R * p_R / u_R[0];
+            double c_A2_R = B_mag_R * B_mag_R / (4*M_PI*u_R[0]*H_R);
+            double c_fast_R = std::sqrt(0.5 * (a2_R + c_A2_R + 
+                        std::sqrt((a2_R + c_A2_R)*(a2_R + c_A2_R) - 4*a2_R*B_n_R*B_n_R/u_R[0])));
+
+            a_L = c_fast_L;
+            a_R = c_fast_R;
+        }else
+        {
+            a_L = std::sqrt(gam_L * p_L / u_L[0]);
+            a_R = std::sqrt(gam_R * p_R / u_R[0]);
+        }
         // double p_star=std::pow((a_L+a_R-(gam-1)/2. * (dot_product(edge_normals[n_face][n_edge], vel_r)-dot_product(edge_normals[n_face][n_edge], vel_l)))
         //  /( a_L/std::pow(p_L,z) + a_R/std::pow(p_R,z) ),1./z);
 
@@ -1022,18 +1337,16 @@ protected:
             exit(1);
         }
 
-        res.resize(2);
         res[0] = S_L;
         res[1] = S_R;
 
         return res;
     }
 
-    std::vector<double> limiter(std::vector<double>& u_r, int n_face, int n_edge)
+    StateVec limiter(StateVec& u_r, int n_face, int n_edge)
     { // here U[4] is also pressure
 
-        std::vector<double> res;
-        res.resize(dim);
+        StateVec res;
 
         double a = 4, b = 2, c = 0.1, d = 10, e = 3, f = 6; // switch function parameters
         auto h = [a, b, c, d, e, f](double r)
@@ -1047,10 +1360,10 @@ protected:
             return res;
         };
 
-        std::vector<double> to = limiter_third_order(u_r, n_face, n_edge);
-        std::vector<double> sb = limiter_superbee(u_r, n_face, n_edge);
+        StateVec to = limiter_third_order(u_r, n_face, n_edge);
+        StateVec sb = limiter_superbee(u_r, n_face, n_edge);
 
-        for (size_t i = 0; i < dim; i++)
+        for (size_t i = 0; i < DIM; i++)
         {
             res[i] = ((1 - h(u_r[i])) * to[i] + h(u_r[i]) * sb[i]);
             // res[i] = ((1 - h(u_r[0])) * to[0] + h(u_r[0]) * sb[0]);
@@ -1068,13 +1381,12 @@ protected:
         // return res;
     }
 
-    std::vector<double> limiter_third_order(std::vector<double> u_r, int n_face, int n_edge)
+    StateVec limiter_third_order(StateVec u_r, int n_face, int n_edge)
     { // here U[4] is also pressure
-        std::vector<double> supb = limiter_superbee(u_r, n_face, n_edge);
+        StateVec supb = limiter_superbee(u_r, n_face, n_edge);
         vector3d<double> R_vec, l_vec, vel, edge_center;
         double R, c, nu_plus;
-        std::vector<double> res;
-        res.resize(dim);
+        StateVec res;
 
         int n_edge_1 = n_edge + 1;
         if ((n_edge_1) == faces[n_face].size())
@@ -1089,10 +1401,6 @@ protected:
         l_vec[2] = U[n_face][3];
 
         vel = cross_product(edge_center, l_vec);
-
-        // tag1
-        // vel /= (-U[n_face][0]) * edge_center.norm();
-
         vel /= (-U[n_face][0] - rho_an[n_face]) * edge_center.norm();
         // double p = pressure(U[n_face], vel, edge_center);
         double p = U[n_face][4] + p_an[n_face];
@@ -1105,7 +1413,7 @@ protected:
         nu_plus = (c + dot_product(vel, edge_normals[n_face][n_edge])) * dt *
                   (distance(vertices[faces[n_face][n_edge]], vertices[faces[n_face][n_edge_1]]) / surface_area[n_face]);
 
-        for (size_t i = 0; i < dim; i++)
+        for (size_t i = 0; i < DIM; i++)
         {
 
             res[i] = std::max(0., std::min(supb[i], 1 + (1 + nu_plus) / 3 * (u_r[i] - 1)));
@@ -1119,15 +1427,14 @@ protected:
         return res;
     }
 
-    std::vector<double> limiter_superbee(std::vector<double> u_r, int n_face, int n_edge)
+    StateVec limiter_superbee(StateVec u_r, int n_face, int n_edge)
     { // here U[4] is also pressure
         // classical Superbee limiter for irregular grids
         // CFL independent
         double etha_minus, etha_plus;
         vector3d<double> R_vec, l_vec, vel, edge_center;
         double R, c, nu_plus;
-        std::vector<double> res;
-        res.resize(dim);
+        StateVec res;
 
         int n_edge_1 = n_edge + 1;
         if ((n_edge_1) == faces[n_face].size())
@@ -1160,7 +1467,7 @@ protected:
         etha_plus = H_plus[n_face][n_edge] / BM_dist[n_face][n_edge];
         etha_minus = H_minus[n_face][n_edge] / BM_dist[n_face][n_edge];
 
-        for (size_t i = 0; i < dim; i++)
+        for (size_t i = 0; i < DIM; i++)
         {
 
             res[i] = std::max(0.,

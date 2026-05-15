@@ -2,14 +2,17 @@
 #include "src/Riemann_solvers/HLLE.hpp"
 #include "src/Riemann_solvers/HLLE_p.hpp"
 #include "src/Riemann_solvers/HLLC.hpp"
+#include "src/Riemann_solvers/HLLD.hpp"
 #include "src/Riemann_solvers/HLLCplus.hpp"
+
 
 using namespace pmp;
 
 int main()
 {
-    // SurfaceMesh mesh = uv_sphere(50,50);
-    //SurfaceMesh mesh = quad_sphere(5);
+    //SurfaceMesh mesh = uv_sphere(65,128);
+    //SurfaceMesh mesh = uv_sphere(128,65);
+    //SurfaceMesh mesh = quad_sphere(6);
     SurfaceMesh mesh = icosphere(4);
     //SurfaceMesh mesh = icosphere_hex(5);
 
@@ -23,7 +26,7 @@ int main()
     size_t maxstep = parameters["maxstep"];
     size_t skipstep = parameters["skipstep"];
 
-    size_t dim = parameters["dim"];
+    //constexpr size_t DIM = 5;
     double gam3d = parameters["gam3d"];
     double gam = 2 - 1 / gam3d;
     double omega_ns = parameters["omega_ns"];
@@ -59,13 +62,8 @@ int main()
     std::ofstream out_lc_90("results/lightcurve90.dat");
     std::ofstream out_lc_180("results/lightcurve180.dat");
 
-    std::vector<std::vector<double>> U_in;
+    std::vector<std::array<double, DIM>> U_in;
     U_in.resize(mesh.n_faces());
-
-    for (size_t i = 0; i < mesh.n_faces(); i++)
-    {
-        U_in[i].resize(dim);
-    }
 
     double element;
     std::vector<double> temp;
@@ -77,9 +75,9 @@ int main()
         elements_read++;
     }
 
-    if (elements_read < mesh.n_faces() * dim)
+    if (elements_read < mesh.n_faces() * DIM)
     {
-        for (size_t i = elements_read; i < mesh.n_faces() * dim; i++)
+        for (size_t i = elements_read; i < mesh.n_faces() * DIM; i++)
         {
             temp.push_back(1);
         }
@@ -90,30 +88,43 @@ int main()
 
     for (size_t i = 0; i < mesh.n_faces(); i++)
     {
-        for (size_t j = 0; j < dim; j++)
+        for (size_t j = 0; j < DIM; j++)
         {
-            U_in[i][j] = temp[i * dim + j];
+            U_in[i][j] = temp[i * DIM + j];
         }
     }
 
-    // MUSCL_HLLE test2(mesh, U_in, dim, gam, threads);
-    // MUSCL_HLLE_p test2(mesh, U_in, dim, gam,omega_ns, threads);
-    MUSCL_HLLC test2(mesh, U_in, dim, gam, omega_ns,accretion_on, threads);
-    //MUSCL_HLLCplus test2(mesh, U_in, dim, gam, omega_ns, accretion_on, threads);
+    //MUSCL_HLLE test2(mesh, U_in, gam, threads);
+    //MUSCL_HLLE_p test2(mesh, U_in, gam,omega_ns, threads);
+    MUSCL_HLLC test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
+    //MUSCL_HLLCplus test2(mesh, U_in, gam, omega_ns, accretion_on, threads);
+    //MUSCL_HLLD test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
+
 
     test2.set_time(t_0);
 
     test2.write_face_centers();
+    test2.write_neighbors_edge();
+    test2.write_neighbors();
     test2.write_faces();
     test2.write_vertices();
 
     test2.write_t_rho();
     test2.write_t_p();
     //test2.write_t_betas();
-    // test2.write_t_curl();
+    test2.write_t_curl();
     test2.write_t_omega_z();
     test2.write_t_L();
     test2.write_t_mach();
+
+    //if(test2.get_m_field_on()){
+    //    test2.write_t_B();
+   // }
+
+   if(test2.get_nuclear_burning_on())
+   test2.write_t_Y();
+
+
 
     std::vector<double> lightcurves, en_changes;
 
@@ -128,17 +139,15 @@ int main()
     out_lc_180.flush();
 
 
-    out_deltaE<< "t, en_gain_acc, en_loss_fall, en_loss_fric, en_loss_rad \n";
+    // out_deltaE<< "t, en_gain_acc, en_loss_fall, en_loss_fric, en_loss_rad \n";
 
-    en_changes=test2.get_energy_changes();
-    out_deltaE<<test2.time() << " "<<en_changes[0]<< " "<<en_changes[1]
-    << " "<<en_changes[2]<< " "<<en_changes[3]<<"\n";
-    out_deltaE.flush();
+    // en_changes=test2.get_energy_changes();
+    // out_deltaE<<test2.time() << " "<<en_changes[0]<< " "<<en_changes[1]
+    // << " "<<en_changes[2]<< " "<<en_changes[3]<<"\n";
+    // out_deltaE.flush();
     
 
-    // test2.write_t_tracer();
 
-    // for (size_t i = 0; i < maxstep; i++)
     size_t steps = 0;
     while (test2.time() < t_max && steps < maxstep)
     {
@@ -155,10 +164,10 @@ int main()
         out_lc_180.flush();
 
 
-        en_changes=test2.get_energy_changes();
-        out_deltaE<<test2.time() << " "<<en_changes[0]<< " "<<en_changes[1]
-        << " "<<en_changes[2]<< " "<<en_changes[3]<<"\n";
-        out_deltaE.flush();
+        // en_changes=test2.get_energy_changes();
+        // out_deltaE<<test2.time() << " "<<en_changes[0]<< " "<<en_changes[1]
+        // << " "<<en_changes[2]<< " "<<en_changes[3]<<"\n";
+        // out_deltaE.flush();
 
 
         if (steps % skipstep == 0)
@@ -169,9 +178,15 @@ int main()
             test2.write_t_curl();
             test2.write_t_omega_z();
             test2.write_t_L();
-            test2.write_t_betas();
+            //test2.write_t_betas();
             test2.write_t_mach();
-            // test2.write_t_tracer();
+
+            // if(test2.get_m_field_on()){
+            //     test2.write_t_B();
+            // }
+
+            if(test2.get_nuclear_burning_on())
+            test2.write_t_Y();
         }
 
         if (test2.get_stop_check())
@@ -182,15 +197,21 @@ int main()
             test2.write_t_curl();
             test2.write_t_omega_z();
             test2.write_t_L();
-            test2.write_t_betas();
+            //test2.write_t_betas();
             test2.write_t_mach();
+            // if(test2.get_m_field_on()){
+            //     test2.write_t_B();
+            // }
+
+            if(test2.get_nuclear_burning_on())
+            test2.write_t_Y();
             break;
         }
 
         steps++;
     }
 
-    test2.write_final_state();
+    //test2.write_final_state();
 
     return 0;
 }
