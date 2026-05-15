@@ -14,7 +14,7 @@ public:
         : isothermal(mesh, U_in, gam, threads){}
 
 
-    StateVec flux_star(StateVec ul, StateVec ur, int n_face, int n_edge)
+    StateVec flux_star(StateVec& ul, StateVec& ur, int n_face, int n_edge)
     {
 
         StateVec FL, FR, F;

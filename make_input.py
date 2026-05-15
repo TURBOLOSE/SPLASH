@@ -19,17 +19,21 @@ def make_input_4(): #no energy as separate variable
 
     l=[]
 
+    rho=np.ones(N)#*1e-3
 
-
+    theta=np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1))
     theta_face_centers=-np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1))+np.pi/2
 
 
     #rho=np.ones(N)
-    omega=np.array([0,0,2])
+    omega0=0.22 
+    #omega=np.array([0,0,0])
+    omega=np.array([0,0,0.03])
+    a=3e-2
 
     #rho=np.ones(N)
-    r=np.sqrt(face_centers[:,1]**2+face_centers[:,2]**2+face_centers[:,0]**2)
-    rho=np.exp(-1/2*(np.linalg.norm(omega)**2)*np.sin(-np.arccos(face_centers[:,2]/r)+np.pi/2)**2)
+    #r=np.sqrt(face_centers[:,1]**2+face_centers[:,2]**2+face_centers[:,0]**2)
+    #rho=np.exp(-1/2*(np.linalg.norm(omega)**2)*np.sin(-np.arccos(face_centers[:,2]/r)+np.pi/2)**2)
 
     for face_num, R in enumerate(face_centers):
         #if( R[2] >0):
@@ -38,10 +42,140 @@ def make_input_4(): #no energy as separate variable
         #    omega=np.array([0,0,-0.5])
         #else:
         #    omega=np.array([0,0,0])
+
+        # if(theta[face_num]<20*np.pi/180):
+        #     #l.append(rho[face_num]*np.cross(R,np.cross(omega,R))/(np.linalg.norm(R)**2))
+        #     rho[face_num]+=0.1*np.tanh(3-8*theta[face_num])
+        #     v=a**2*(-0.8)/(np.sin(theta[face_num])*2*omega0*np.cosh(3-8*theta[face_num])**2)*np.cross(omega,R)/np.linalg.norm(np.cross(omega,R))
+        #     l.append(rho[face_num]*np.cross(R,v)/(np.linalg.norm(R)))
+        # else:
+        #     l.append(np.array([0,0,0]))
+
         l.append(rho[face_num]*np.cross(R,np.cross(omega,R))/(np.linalg.norm(R)**2))
+        #rho[face_num]+=omega0*np.linalg.norm(omega)*np.sin(theta[face_num])**2/a**2
     l=np.array(l)
 
     pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2]]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
+
+
+def make_input_4_polar_dense_spot():
+    face_centers = pd.read_table('results/face_centers.dat',
+                                  header=None, delimiter=r"\s+")
+    face_centers = np.array(face_centers)
+    # Normalize to unit sphere
+    face_centers = face_centers / np.linalg.norm(face_centers,
+                                                  axis=1, keepdims=True)
+    N = len(face_centers)
+
+    Omega0  = 0.22     # frame rotation
+    a       = 3e-2     # isothermal sound speed
+    theta_c = 20 * np.pi / 180    # vortex edge colatitude
+    dens_fluc=0.01
+    #dens_fluc=0.9
+    # tanh transition: rho = 1 + 0.1*tanh(3 - 8*theta)
+    # transition center at theta = 3/8 rad ~ 21.5 deg
+
+    rho = np.ones(N)
+    l   = np.zeros((N, 3))   # pre-allocate — avoids the double-append bug
+
+    # Colatitude of each cell
+    theta = np.arccos(np.clip(face_centers[:, 2], -1, 1))
+
+    for i, R in enumerate(face_centers):
+        th = theta[i]
+
+        # Density profile (applied everywhere for smooth field)
+        rho[i] = 1.0 + dens_fluc * np.tanh(3 - 8 * th)
+
+        #if th < theta_c:
+        # Geostrophic velocity:
+        # v_phi = (a^2 / (2*Omega0*cos(theta)*rho)) * d(rho)/d(theta)
+        # d(rho)/d(theta) = -0.8 / cosh^2(3-8*theta)
+
+        f = 2.0 * Omega0 * np.cos(th)   
+
+        # Guard against f -> 0 (shouldn't happen near pole but be safe)
+        if abs(f) < 1e-10:
+            continue
+
+        drho_dth = -8 * dens_fluc / np.cosh(3 - 8 * th)**2
+
+        v_phi_magnitude = (a**2 / (f * rho[i])) * drho_dth
+        # v_phi < 0 => clockwise => anticyclonic (correct for dense spot)
+
+        # Zonal unit vector e_phi = (-sin(phi), cos(phi), 0)
+        phi   = np.arctan2(R[1], R[0])
+        e_phi = np.array([-np.sin(phi), np.cos(phi), 0.0])
+
+        v_vec = v_phi_magnitude * e_phi
+        # Angular momentum: l = rho * (R x v), R is unit vector here
+        l[i] = rho[i] * np.cross(R, v_vec)
+
+        # else: l[i] = 0 already (pre-allocated)
+
+    # Diagnostics
+    v_max = np.max(np.linalg.norm(-np.cross(face_centers,l) / rho[:, None], axis=1))
+    Ma    = v_max / a
+    f_pole = 2 * Omega0
+    L_R   = a / f_pole
+
+    print(f'Max |v|      = {v_max:.5f}')
+    print(f'Max Mach     = {Ma:.4f}')
+    print(f'L_R (pole)   = {L_R:.4f}')
+    print(f'theta_c/L_R  = {theta_c/L_R:.2f}  (should be > 2 for coherent drift)')
+    print(f'rho max/min  = {np.max(rho):.4f} / {np.min(rho):.4f}')
+    print(f'delta_rho    = {(np.max(rho)-1)*100:.2f}%')
+
+    pd.DataFrame(
+        np.column_stack([rho, l[:, 0], l[:, 1], l[:, 2]])
+    ).to_csv('input/input.dat', index=False, sep=' ', header=False)
+
+def make_input_4_cyclone(omega_cyclone=0.05):
+    """
+    Initializes an isothermal cyclone/anticyclone at lon=45, lat=45 with R0=1/11.
+    Outputs 4 columns: rho, l_x, l_y, l_z.
+    """
+    face_centers = pd.read_table('results/face_centers.dat', header=None, delimiter=r"\s+")
+    face_centers = np.array(face_centers)
+    N = len(face_centers)
+    
+    R_norm = np.linalg.norm(face_centers, axis=1)
+    n_hat = face_centers / R_norm[:, None]
+    R_sphere = 1.0 # Assuming unit sphere based on typical mesh setups
+
+    # Target lon=45°, lat=45°
+    lat_c = np.pi / 4.0
+    lon_c = np.pi / 4.0
+    
+    n_c = np.array([
+        np.cos(lat_c) * np.cos(lon_c),
+        np.cos(lat_c) * np.sin(lon_c),
+        np.sin(lat_c)
+    ])
+    
+    R0 = 1.0 / 11.0
+    
+    # Calculate great-circle distances
+    cos_dist = np.clip(n_hat @ n_c, -1.0, 1.0)
+    r_gc = R_sphere * np.arccos(cos_dist)
+    
+    rho = np.ones(N, dtype=float)
+    l = np.zeros((N, 3), dtype=float)
+    
+    for i, R_vec in enumerate(face_centers):
+        if r_gc[i] < R0:
+            # Smoothly taper the angular velocity towards zero at R0
+            smooth = 0.5 * (1 - np.cos(np.pi * r_gc[i] / R0))
+            local_omega = omega_cyclone * smooth * n_c
+            
+            # Angular momentum l = rho * (R x (omega x R)) / |R|^2
+            l[i] = rho[i] * np.cross(R_vec, np.cross(local_omega, R_vec)) / (R_norm[i]**2)
+
+    pd.DataFrame(
+        np.column_stack([rho, l[:, 0], l[:, 1], l[:, 2]])
+    ).to_csv('input/input.dat', index=False, sep=' ', header=False)
+
+
 
 def make_input_4_cos_bell(): #no energy as separate variable
     face_centers=pd.read_table('results/face_centers.dat', header=None, delimiter=r"\s+")
@@ -152,6 +286,88 @@ def make_input_5():
 
     pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
 
+
+
+def make_input_5_polar_dense_spot():
+    face_centers = pd.read_table('results/face_centers.dat',
+                                  header=None, delimiter=r"\s+")
+    face_centers = np.array(face_centers)
+    # Normalize to unit sphere
+    face_centers = face_centers / np.linalg.norm(face_centers,
+                                                  axis=1, keepdims=True)
+    N = len(face_centers)
+
+
+    gam0=5./3
+    gam=2-1/gam0
+    Omega0  = 0.22     # frame rotation
+    a_target       = 3e-2   
+    theta_c = 20 * np.pi / 180    
+
+
+    p=np.ones(N)
+    rho = gam*p/a_target**2
+    l   = np.zeros((N, 3))  
+    v   = np.zeros((N, 3))  
+    # Colatitude of each cell
+    theta = np.arccos(np.clip(face_centers[:, 2], -1, 1))
+
+    p_fluc=0.01
+
+    
+
+    for i, R in enumerate(face_centers):
+        th = theta[i]
+
+        # Density profile (applied everywhere for smooth field)
+        p[i] = 1.0 + p_fluc * np.tanh(3 - 8 * th)
+
+        #if th < theta_c:
+        # Geostrophic velocity:
+        # v_phi = (a^2 / (2*Omega0*cos(theta)*rho)) * d(rho)/d(theta)
+        # d(rho)/d(theta) = -0.8 / cosh^2(3-8*theta)
+
+        f = 2.0 * Omega0 * np.cos(th)   
+
+        # Guard against f -> 0 (shouldn't happen near pole but be safe)
+        if abs(f) < 1e-10:
+            continue
+
+        dp_dth = -8 * p_fluc / np.cosh(3 - 8 * th)**2
+
+        v_phi_magnitude = (a_target**2 / (f * rho[i])) * dp_dth
+        # v_phi < 0 => clockwise => anticyclonic (correct for dense spot)
+
+        # Zonal unit vector e_phi = (-sin(phi), cos(phi), 0)
+        phi   = np.arctan2(R[1], R[0])
+        e_phi = np.array([-np.sin(phi), np.cos(phi), 0.0])
+
+        v_vec = v_phi_magnitude * e_phi
+        # Angular momentum: l = rho * (R x v), R is unit vector here
+        l[i] = rho[i] * np.cross(R, v_vec)
+        v[i] = v_vec
+
+        # else: l[i] = 0 already (pre-allocated)
+
+    # Diagnostics
+    v_max = np.max(np.linalg.norm(-np.cross(face_centers,l) / rho[:, None], axis=1))
+    Ma    = v_max / a_target
+    f_pole = 2 * Omega0
+    L_R   = a_target / f_pole
+
+    E = 1/(gam-1)*p + rho*np.linalg.norm(v, axis=1)*np.linalg.norm(v, axis=1)/2
+
+    print(f'Max |v|      = {v_max:.5f}')
+    print(f'Max Mach     = {Ma:.4f}')
+    print(f'L_R (pole)   = {L_R:.4f}')
+    print(f'theta_c/L_R  = {theta_c/L_R:.2f}  (should be > 2 for coherent drift)')
+    print(f'p max/min  = {np.max(p):.4f} / {np.min(p):.4f}')
+    print(f'delta_p    = {(np.max(p)-1)*100:.2f}%')
+
+    pd.DataFrame(
+        np.column_stack([rho, l[:, 0], l[:, 1], l[:, 2], E])
+    ).to_csv('input/input.dat', index=False, sep=' ', header=False)
+
 def make_input_5_coriolis():
     gam0=5./3
     gam=2-1/gam0
@@ -164,9 +380,13 @@ def make_input_5_coriolis():
 
     #rho_0=10
     #p_0=0.01
+
     rho_0=5
     p_0=1e-2
-    omega0=np.array([0,0,0.1])
+    #rho_0=0.1
+    #p_0=1e-4
+
+    omega0=np.array([0,0,0.22])
 
     #omega=np.array([0,0,0.05])
     # Set the local cyclone rotation purely in the Z axis since it's at the pole
@@ -184,9 +404,10 @@ def make_input_5_coriolis():
     p=np.ones(N, dtype='d')*p_0 
     theta=np.arccos((face_centers[:,2])/np.linalg.norm(face_centers, axis=1)) 
 
+
     #p=0.5+(np.linalg.norm(omega)**2*rho/2*np.sin(theta)**2)
 
-
+    print(np.sqrt(4*np.pi/len(face_centers)))
 
     #rho=rho_0*(1+(gam-1)/2*M_0**2*np.sin(theta, dtype='d')**2)**(1/(gam-1))
     #p=p_0*(1+(gam-1)/2*M_0**2*np.sin(theta, dtype='d')**2)**(gam/(gam-1))
@@ -200,7 +421,8 @@ def make_input_5_coriolis():
     phi=np.arctan2(face_centers[:,1]/np.linalg.norm(face_centers, axis=1),face_centers[:,0]/np.linalg.norm(face_centers, axis=1)) #long
     #a=1
     a=2
-    R0=a/3
+    #R0=a/3
+    R0=2/11
     
     #r=a*np.arccos(np.sin(0)*np.sin(lon)+np.cos(lon)*np.cos(0)*np.cos(phi-np.pi*3/2))
     #theta_c=np.pi/2
@@ -208,10 +430,11 @@ def make_input_5_coriolis():
     phi_c=0
     r=a*np.arccos(np.sin(theta_c)*np.sin(lon)+np.cos(lon)*np.cos(theta_c)*np.cos(phi-phi_c))
 
-
+    cnt=0
     for face_num, R in enumerate(face_centers):
 
-        #if r[face_num]<R0:
+        if r[face_num]<R0:
+            cnt+=1
         #    rho[face_num]*=1.2
 
 
@@ -245,6 +468,8 @@ def make_input_5_coriolis():
         v.append(np.array([0,0,0]))
 
     #p=1+(np.linalg.norm(omega)**2*rho/2*np.sin(theta)**2)
+
+    print(cnt)
 
     l=np.array(l) 
     v=np.array(v) 
@@ -292,7 +517,12 @@ def make_input_5_coriolis():
     #print(p)
 
    #v=np.array(v)
-
+    gam_1=2-1/(4/3)
+    #print('sqrt(gH)_v1=',np.sqrt((2*gam_1-1)/(gam_1-1)*p_0/rho_0) )
+    print('sqrt(gH)_v2=',np.sqrt(gam*p_0/rho_0) )
+    #print('sqrt(gH)_main=',np.sqrt((2*gam-1)/(gam-1)*p_0/rho_0) )
+    #print(f'Estimated Rossby radius  : {np.sqrt((2*gam-1)/(gam-1)*p_0/rho_0)/(2*np.linalg.norm(omega0)):.4f}')
+    print(f'Estimated Rossby radius  : {np.sqrt(gam*p_0/rho_0)/(2*np.linalg.norm(omega0)):.4f}')
     print('mean_Mach= ',np.mean(np.linalg.norm(v, axis=1)/np.sqrt(gam*p/rho)))
     print('max c_s= ',np.max(gam *p/rho))
     if(np.max(gam *p/rho)>1/np.sqrt(3)):
@@ -304,253 +534,6 @@ def make_input_5_coriolis():
         print('Energy<0!!')
 
     pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
-
-def make_input_geostrophic_pressure_first():
-    """
-    SPHEREPACK-style initialization:
-    1. Prescribe pressure perturbation as a Gaussian blob
-    2. Compute its gradient on the icosahedral mesh (LSQ reconstruction)
-    3. Invert geostrophic balance to get velocity:  f * r̂ × v = -∇Π/Σ
-       => v = (r̂ × ∇Π) / (Σ * f)
-    4. Compute angular momentum l from v
-    5. Energy from v and Π
-    """
-
-    gam0 = 5./3
-    gam  = 2 - 1/gam0      # shallow water effective gamma
-
-    face_centers = np.array(pd.read_table('results/face_centers.dat',
-                            header=None, delimiter=r"\s+"))
-    
-    with open('results/neighbors.dat', 'r') as f:
-        neighbors = [[int(x) for x in line.split()] for line in f]
-
-    face_centers=face_centers/np.array([np.linalg.norm(face_centers,axis=1),np.linalg.norm(face_centers,axis=1),np.linalg.norm(face_centers,axis=1)]).T
-    N = len(face_centers)
-
-    # ----------------------------------------------------------------
-    # Parameters
-    # ----------------------------------------------------------------
-    rho_0        = 1
-    #p_0          = 4e-4
-    Omega_frame  = 0.1
-    omega0       = np.array([0.0, 0.0, Omega_frame])
-
-    lat_c=0.7
-
-    cos_tc      = np.sin(lat_c)  
-    f_0    = 2 * Omega_frame * cos_tc
-    # Vortex centre (arbitrary latitude/longitude)
-    theta_c = np.pi/2-lat_c          # colatitude from north pole
-    phi_c   = 0.5          # longitude
-
-   # Ro_target  = 0.05     # Rossby number
-   # Ma_target  = 1
-    sigma_r  = 0.1        # Gaussian width in radians
-   # c_s_target    = f_0 * sigma_r / (Ma_target / Ro_target)
-    #p_0 = c_s_target ** 2 * rho_0
-    p_0=1e-4
-
-    # Pressure perturbation amplitude and width
-    # Negative = low pressure = cyclone (Northern Hemisphere)
-    delta_Pi = -0.05 * p_0
-    #delta_Pi = -0.05 * p_0
-    #delta_Pi = 0.05 *p_0
-
-    # ----------------------------------------------------------------
-    # Geometry
-    # ----------------------------------------------------------------
-    R_norm   = np.linalg.norm(face_centers, axis=1)
-    R_sphere = np.mean(R_norm)
-    n_hat    = face_centers / R_norm[:, None]   # unit normals
-
-    # Coriolis parameter f = 2Ω·r̂  (= 2Ω cosθ)
-    # n_hat[:,2] = cosθ
-    f_cor = 2.0 * Omega_frame * n_hat[:, 2]     # shape (N,)
-
-    # Unit normal at vortex centre
-    n_c = np.array([
-        np.sin(theta_c) * np.cos(phi_c),
-        np.sin(theta_c) * np.sin(phi_c),
-        np.cos(theta_c)
-    ])
-
-    # Great-circle distances from vortex centre
-    cos_dist = np.clip(n_hat @ n_c, -1.0, 1.0)
-    r_gc     = R_sphere * np.arccos(cos_dist)   # GCD
-
-    # ----------------------------------------------------------------
-    # Step 1: Prescribe pressure field
-    # Gaussian in great-circle angle (dimensionless, angle in radians)
-    # ----------------------------------------------------------------
-    angle_gc = r_gc / R_sphere   # great-circle angle, radians
-
-    p = p_0 + delta_Pi * np.exp(-angle_gc**2 / (2.0 * sigma_r**2))
-
-    # Density uniform (no centrifugal, Coriolis does not compress)
-    rho = np.ones(N) * rho_0
-
-    # ----------------------------------------------------------------
-    # Step 2: Compute ∇Π on the mesh
-    # Use weighted least-squares gradient reconstruction:
-    # For each cell i with neighbours j:
-    #   Π_j - Π_i ≈ ∇Π|_i · (r_j - r_i)_tangential
-    # Solved in the local tangent plane of cell i.
-    # ----------------------------------------------------------------
-
-    # Find neighbours via KDTree (include enough to overdetermine the 2D system)
-
-    #tree    = KDTree(face_centers)
-    #N_neigh = 9    # number of neighbours (excluding self); 9 > 2 DOF, robust
-    #dists, idx = tree.query(face_centers, k=N_neigh + 1)
-    #print(dists)
-
-
-    dists=[]
-    for i,face in enumerate(face_centers):
-        temp=[]
-        for n in neighbors[i]:
-            temp.append(2*np.arcsin(np.linalg.norm(face_centers[n] - face_centers[i])/2))
-        dists.append(temp)
-
-    idx=neighbors
-
-    # idx[i] contains neighbours
-
-    grad_Pi = np.zeros((N, 3))   # 3D gradient (will be projected to tangent plane)
-
-    # for i in range(N):
-    #     ni  = n_hat[i]          # unit normal at cell i
-    #     Pi_i = p[i]
-
-    #     # Build two orthogonal tangent vectors at cell i
-    #     # e1: arbitrary vector not parallel to ni
-    #     ref = np.array([1.0, 0.0, 0.0])
-    #     if abs(ni @ ref) > 0.9:
-    #         ref = np.array([0.0, 1.0, 0.0])
-    #     e1 = np.cross(ni, ref);  e1 /= np.linalg.norm(e1)
-    #     e2 = np.cross(ni, e1)    # already unit since ni⊥e1
-
-    #     # Accumulate least-squares system A x = b, x = [∂Π/∂e1, ∂Π/∂e2]
-    #     A = []
-    #     b = []
-    #     for j in idx[i]:    # skip self no longer needed since neighbors.dat only has neighbors
-    #         dr    = face_centers[j] - face_centers[i]
-    #         # Project dr onto tangent plane of cell i
-    #         dr_t  = dr - (dr @ ni) * ni
-    #         A.append([dr_t @ e1, dr_t @ e2])
-    #         b.append(p[j] - Pi_i)
-
-    #     A = np.array(A)
-    #     b = np.array(b)
-
-    #     # Weighted by inverse distance (closer neighbours count more)
-    #     w = 1.0 / (np.linalg.norm(
-    #             face_centers[idx[i]] - face_centers[i], axis=1) + 1e-12)
-    #     W = np.diag(w)
-
-    #     # Solve weighted LSQ: (AᵀWA) x = AᵀWb
-    #     AtW  = A.T @ W
-    #     coef, _, _, _ = np.linalg.lstsq(AtW @ A, AtW @ b, rcond=None)
-
-    #     # Back to 3D (already tangential to sphere)
-    #     grad_Pi[i] = coef[0] * e1 + coef[1] * e2
-
-
-    for i in range(N):
-        alpha_i   = angle_gc[i]           # great-circle angle, radians
-        sin_alpha = np.sqrt(1.0 - cos_dist[i]**2)
-
-        # Skip the vortex centre and antipode where sin(alpha)→0
-        if sin_alpha < 1e-10:
-            continue
-        tangent = n_c - cos_dist[i] * n_hat[i] 
-
-        grad_Pi[i] = (
-            (alpha_i / sigma_r**2)
-            * delta_Pi
-            * np.exp(-alpha_i**2 / (2.0 * sigma_r**2))
-            * tangent / sin_alpha
-        )   
-
-    print(np.insert(grad_Pi[:,0],0,0))
-    pd.DataFrame(np.insert(grad_Pi[:,0],0,0)).to_csv('results/gradp.dat', index=False, sep=' ', header=False)
-
-
-    # ----------------------------------------------------------------
-    # Step 3: Geostrophic velocity reconstruction
-    # Geostrophic balance:  Σ f (r̂ × v) = -∇Π
-    # Since r̂ × v is tangential and |r̂| = 1:
-    #   r̂ × v = -∇Π / (Σ f)
-    # Take cross product with r̂ from left:
-    #   r̂ × (r̂ × v) = -r̂ × ∇Π / (Σ f)
-    #   -v = -r̂ × ∇Π / (Σ f)        [since r̂×(r̂×v) = -v for tangential v]
-    #   v  =  r̂ × ∇Π / (Σ f)
-    # ----------------------------------------------------------------
-
-    v = np.zeros((N, 3))
-
-    # Mask cells too close to equator where f→0 (geostrophic balance breaks)
-
-
-    f_min   = 2.0 * Omega_frame * np.cos(np.radians(80))  # within 10° of equator
-    eq_mask = np.abs(f_cor) > f_min
-
-    # # Tropics: set v=0 (no geostrophic balance possible)
-    # v[~eq_mask] = 0.0
-
-    v[eq_mask] = (
-        np.cross(n_hat[eq_mask], grad_Pi[eq_mask])
-        / (rho[eq_mask, None] * f_cor[eq_mask, None])
-    )
-
-    # ----------------------------------------------------------------
-    # Step 4: Enforce r̂·v = 0 exactly (remove any radial leakage)
-    # ----------------------------------------------------------------
-    vdotn = np.einsum('ij,ij->i', v, n_hat)
-    v    -= vdotn[:, None] * n_hat
-
-    # ----------------------------------------------------------------
-    # Step 5: Angular momentum  l = Σ (r × v) / |r|
-    # l_i = rho * cross(R_vec, v) / |R|   [units: surface density × velocity]
-    # ----------------------------------------------------------------
-    l = np.zeros((N, 3))
-    for i in range(N):
-        l[i] = rho[i] * np.cross(face_centers[i], v[i]) / R_norm[i]
-
-    # ----------------------------------------------------------------
-    # Step 6: Energy
-    # ----------------------------------------------------------------
-    E = 1.0/(gam - 1.0) * p + rho * np.sum(v**2, axis=1) / 2.0
-
-    # ----------------------------------------------------------------
-    # Diagnostics
-    # ----------------------------------------------------------------
-    c_s  = np.sqrt(gam * p / rho)
-    mach = np.linalg.norm(v, axis=1) / c_s
-    rv   = np.max(np.abs(np.einsum('ij,ij->i', n_hat, v)))
-
-    print(f'Pressure min/max         : {np.min(p):.6f} / {np.max(p):.6f}')
-    print(f'ΔΠ (centre)              : {np.min(p) - p_0:.6f}  (expected {delta_Pi:.6f})')
-    print(f'Max |v|                  : {np.max(np.linalg.norm(v, axis=1))}')
-    print(f'Max Mach                 : {np.max(mach)}')
-    print(f'Max c_s                 : {np.max(gam*p/rho)}')
-    print(f'Max |r̂·v| (tangency)    : {rv:.2e} ')
-    #print(f'Cells zeroed (equator)   : {np.sum(~eq_mask)}')
-
-    # Estimated geostrophic velocity scale:  V ~ ΔΠ / (Σ f R σ)
-    f_c    = 2.0 * Omega_frame * np.cos(theta_c)
-    V_est  = abs(delta_Pi) / (rho_0 * f_c * R_sphere * sigma_r)
-    Ro_est = V_est / (f_c * R_sphere * sigma_r)
-    print(f'Estimated velocity scale : {V_est:.4f}')
-    print(f'Cyclone radius           : {sigma_r:.4f}')
-    print(f'Estimated Rossby radius  : {np.sqrt((2*gam-1)/(gam-1)*p_0/rho_0)/(2*np.linalg.norm(Omega_frame)):.4f}')
-    print(f'Estimated Rossby number  : {Ro_est:.4f}  (<<1 needed for geostrophic validity)')
-
-    pd.DataFrame(
-        np.column_stack([rho, l[:, 0], l[:, 1], l[:, 2], E])
-    ).to_csv('input/input.dat', index=False, sep=' ', header=False)
-
 
 def make_input_geostrophic_coriolis():
     gam0 = 5./3
@@ -1337,7 +1320,8 @@ def make_input_5_B():
     for face_num, R in enumerate(face_centers):
 
         if r[face_num]<R0:
-            B.append(B0+np.array([0.001,0,0]))
+            B.append(B0+np.array([1e-4,0,0]))
+            #B.append(B0)
         else:
             B.append(B0)
             #rho[face_num]*=1.2
@@ -1368,13 +1352,474 @@ def make_input_5_B():
 
     B=B*np.sqrt(H)
     #E=1/(gam-1)*p+rho*np.linalg.norm(v, axis=1)*np.linalg.norm(v, axis=1)/2+rho*np.linalg.norm(omega)**2*(np.sin(theta)**2)/2
-    E=1/(gam-1)*p+rho*np.linalg.norm(v, axis=1)**2/2+np.linalg.norm(B,axis=1)**2/2
+    E=1/(gam-1)*p+rho*np.linalg.norm(v, axis=1)**2/2+np.linalg.norm(B,axis=1)**2/(8*np.pi)
     if(E.any()<0):
         print('Energy<0!!')
 
     pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E,B[:,0],B[:,1],B[:,2]]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
 
 
+def make_input_magneto_rossby(n_wave=2, m_wave=2,
+                               B0_frac=0.3,
+                               epsilon=0.01):
+    """
+    Magneto-Rossby wave initial data for compressible shallow water MHD.
+
+    Background state:
+        Sigma_0  = uniform density
+        Pi_0     = uniform pressure (EOS consistent)
+        B_0      = B0_amp * e_phi  (uniform toroidal field, divergence-free)
+        v_0      = 0
+
+    Perturbation (mode n, m):
+        Stream function:  psi = epsilon * P_n^m(cos theta) * cos(m*phi)
+        delta_v from psi (divergence-free by construction)
+        delta_Pi from Bernoulli/geostrophic Poisson solve
+        delta_B  from linearised induction:
+            -i omega delta_B = curl(delta_v x B_0)
+
+    Dispersion relation (sphere, slow magneto-Rossby branch):
+        omega^2 + omega_R * omega - omega_A^2 = 0
+        omega_R =  2*Omega*m / (n*(n+1))         [Rossby frequency]
+        omega_A =  m * v_A     (v_A = B0/sqrt(4pi*H*Sigma), set 4pi*H=1)
+
+    Slow branch:
+        omega_MR = -omega_R/2 + sqrt((omega_R/2)^2 + omega_A^2)  (negative, westward)
+
+    Diagnostics:
+        - Check ∇·B = 0 at t=0
+        - EOS residual |Pi - K*Sigma^gam|
+        - Balance residual |∇B_bern + (f+zeta)(r̂×v)|
+        - Phase speed measured from longitude of pressure maximum
+    """
+    from scipy.sparse         import lil_matrix
+    from scipy.sparse.linalg  import minres
+    from scipy.special        import lpmv
+    import numpy as np
+    import pandas as pd
+
+    # ----------------------------------------------------------------
+    # Equation of state
+    # ----------------------------------------------------------------
+    gam0 = 5./3
+    gam  = 2 - 1/gam0           # shallow water effective gamma
+
+    # ----------------------------------------------------------------
+    # Load mesh
+    # ----------------------------------------------------------------
+    face_centers = np.array(pd.read_table('results/face_centers.dat',
+                             header=None, delimiter=r"\s+"))
+    with open('results/neighbors.dat', 'r') as fh:
+        neighbors = [[int(x) for x in line.split()] for line in fh]
+
+    face_centers = face_centers / np.linalg.norm(face_centers,
+                                                  axis=1, keepdims=True)
+    N = len(face_centers)
+
+    # ----------------------------------------------------------------
+    # Parameters
+    # ----------------------------------------------------------------
+    Omega_frame = 0.1
+    rho_0       = 1.0
+    n           = n_wave
+    m           = m_wave
+
+    # Set p_0 so that Ma ~ 0.1  (same reasoning as RH wave)
+    # Peak velocity ~ epsilon * Omega * R, R=1
+    V_scale     = epsilon * Omega_frame
+    c_s_target  = V_scale / 0.1
+    p_0         = rho_0 * c_s_target**2 / gam
+    K_eos       = p_0 / rho_0**gam       # Pi = K_eos * Sigma^gam
+
+    # Background toroidal field: B0_frac * v_A_target = B0_frac * c_s
+    # Alfven speed:  v_A = B0 / sqrt(4pi H Sigma) -- set 4pi*H = 1
+    fourpi_H    = 1.0
+    B0_amp      = B0_frac * c_s_target * np.sqrt(fourpi_H * rho_0)
+    v_A         = B0_amp / np.sqrt(fourpi_H * rho_0)
+
+    # Dispersion relation
+    omega_R     =  2.0 * Omega_frame * m / (n * (n + 1))   # Rossby freq (>0)
+    omega_A     =  m * v_A                                   # Alfven freq (R=1)
+    # Slow magneto-Rossby branch (propagates westward):
+    omega_MR    = (-omega_R/2.0
+                   + np.sqrt((omega_R/2.0)**2 + omega_A**2))
+    # (negative omega_MR means westward propagation)
+    omega_MR    = -omega_R/2.0 - np.sqrt((omega_R/2.0)**2 + omega_A**2)
+
+    T_MR        = abs(2*np.pi / (m * omega_MR)) if omega_MR != 0 else np.inf
+
+    print(f'=== Magneto-Rossby wave  n={n}  m={m} ===')
+    print(f'c_s          = {c_s_target:.5f}')
+    print(f'v_A          = {v_A:.5f}   (= {v_A/c_s_target:.3f} c_s)')
+    print(f'B0_amp       = {B0_amp:.5f}')
+    print(f'omega_R      = {omega_R:.6f}   [Rossby freq]')
+    print(f'omega_A      = {omega_A:.6f}   [Alfven freq]')
+    print(f'omega_MR     = {omega_MR:.6f}   [magneto-Rossby freq]')
+    print(f'T_MR (wave)  = {T_MR:.4f}   code units')
+    print(f'T_inertial   = {2*np.pi/Omega_frame:.4f}   code units')
+    if abs(omega_A) < 0.1 * abs(omega_R):
+        print('Regime: weak field  (omega_A << omega_R, pure Rossby limit)')
+    elif abs(omega_A) > 10 * abs(omega_R):
+        print('Regime: strong field  (omega_A >> omega_R, Alfven limit)')
+    else:
+        print('Regime: intermediate (both Rossby and Alfven important)')
+
+    # ----------------------------------------------------------------
+    # Geometry
+    # ----------------------------------------------------------------
+    R_norm   = np.linalg.norm(face_centers, axis=1)
+    R_sphere = np.mean(R_norm)
+    n_hat    = face_centers / R_norm[:, None]
+
+    # Spherical coordinates
+    sin_lat  = n_hat[:, 2]                             # sin(lat) = cos(colat)
+    cos_lat  = np.sqrt(np.maximum(1 - sin_lat**2, 0))
+    phi      = np.arctan2(n_hat[:, 1], n_hat[:, 0])
+    colat    = np.arccos(np.clip(sin_lat, -1, 1))      # colatitude θ
+
+    f_cor    = 2.0 * Omega_frame * sin_lat
+
+    # Orthonormal tangent basis (east, north)
+    e_phi    = np.column_stack([-np.sin(phi), np.cos(phi), np.zeros(N)])
+    e_lat    = np.column_stack([-sin_lat*np.cos(phi),
+                                 -sin_lat*np.sin(phi),
+                                  cos_lat])
+    e_colat  = -e_lat   # southward (increasing colatitude)
+
+    # ----------------------------------------------------------------
+    # Background magnetic field: B_0 = B0_amp * e_phi  (toroidal)
+    # Satisfies ∇·B = 0 on the sphere since B_phi = const
+    # ----------------------------------------------------------------
+    B_bg     = B0_amp * e_phi                   # shape (N, 3)
+
+    # ----------------------------------------------------------------
+    # Step 1: Associated Legendre polynomial and derivatives
+    #
+    # psi = epsilon * P_n^m(cos theta) * cos(m*phi)   [stream function]
+    #
+    # Use unnormalised lpmv(m, n, cos theta)
+    # dP/d(cos theta) via recurrence:
+    #   sin(theta) dP_n^m/dtheta = n cos(theta) P_n^m
+    #                             - (n+m) P_{n-1}^m
+    # ----------------------------------------------------------------
+    cos_colat = sin_lat     # cos(colat) = sin(lat)
+    sin_colat = cos_lat     # sin(colat) = cos(lat)
+
+    Pnm       = lpmv(m, n,   cos_colat)         # P_n^m(cos theta)
+    Pn1m      = lpmv(m, n-1, cos_colat)         # P_{n-1}^m(cos theta)
+
+    # dP_n^m / d(theta)  via recurrence (safe for sin_colat > 0)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        dPnm_dtheta = np.where(
+            sin_colat > 1e-10,
+            (n * cos_colat * Pnm - (n + m) * Pn1m) / sin_colat,
+            0.0)
+
+    # ----------------------------------------------------------------
+    # Step 2: Velocity perturbation from stream function
+    #
+    # v_east  = -(1/R) d psi / d theta
+    # v_north =  (1/(R sin theta)) d psi / d phi
+    # (sign: right-hand Rossby wave -- low pressure to the left)
+    # ----------------------------------------------------------------
+    cos_mphi = np.cos(m * phi)
+    sin_mphi = np.sin(m * phi)
+
+    # Stream function value and derivatives
+    psi       = epsilon * Pnm * cos_mphi
+
+    dpsi_dth  = epsilon * dPnm_dtheta * cos_mphi        # d psi / d theta
+    dpsi_dphi = -epsilon * m * Pnm * sin_mphi           # d psi / d phi
+
+    v_east    = -(1.0 / R_sphere) * dpsi_dth
+    v_north   = np.where(sin_colat > 1e-10,
+                         (1.0 / (R_sphere * sin_colat)) * dpsi_dphi,
+                         0.0)
+
+    v = v_east[:, None] * e_phi + v_north[:, None] * e_lat
+
+    # Enforce tangency r̂·v = 0
+    v -= np.einsum('ij,ij->i', v, n_hat)[:, None] * n_hat
+    v_sq = np.sum(v**2, axis=1)
+
+    # ----------------------------------------------------------------
+    # Step 3: Vorticity of perturbation
+    #
+    # zeta = -psi * n*(n+1) / R^2   (Laplace-Beltrami eigenvalue)
+    # This is exact for a single spherical harmonic mode.
+    # ----------------------------------------------------------------
+    zeta = -psi * n * (n + 1) / R_sphere**2
+    eta  = f_cor + zeta          # absolute vorticity
+
+    # ----------------------------------------------------------------
+    # Step 4: Bernoulli Poisson solve (same as RH wave)
+    #
+    # ∇B_bern = -(f+zeta)(r̂ × v)
+    # ∇²B_bern = ∇·F,  F = -(f+zeta)(r̂×v)
+    #
+    # r̂ × e_phi = e_lat,   r̂ × e_lat = -e_phi
+    # => r̂ × v = v_east * e_lat - v_north * e_phi
+    # => F = eta * (v_north * e_phi - v_east * e_lat)
+    # ----------------------------------------------------------------
+    F_vec  = eta[:, None] * (v_north[:, None] * e_phi
+                             - v_east[:, None]  * e_lat)
+
+    # Include the magnetic pressure term in Bernoulli:
+    # B_total = B_bg + delta_B; total magnetic pressure enters B_bern
+    # At leading order (linear), only B_bg contributes since delta_B ~ epsilon
+    # B_bern = v^2/2 + gam/(gam-1) Pi/Sigma + B^2/(4pi H Sigma)
+    # The RHS of the Poisson equation gets an extra magnetic contribution:
+    # F_mag = -(eta_A)(r̂ × v) where eta_A = B_0^2/(4pi H Sigma) related term
+    # At linear order this is O(epsilon * B0^2) -- included below
+
+    # Extra force from background Lorentz:
+    # J x B / Sigma where J = curl(B_bg)/(4pi H) = 0 for uniform toroidal B_bg
+    # => background Lorentz force is zero for uniform B_bg ✓
+
+    # Divergence of F
+    area_cell = 4.0 * np.pi * R_sphere**2 / N
+    div_F     = np.zeros(N)
+
+    for i in range(N):
+        ni = n_hat[i]
+        for j in neighbors[i]:
+            dr   = face_centers[j] - face_centers[i]
+            d    = np.linalg.norm(dr)
+            if d < 1e-12:
+                continue
+            n_edge  = dr / d
+            n_edge -= (n_edge @ ni) * ni
+            nn      = np.linalg.norm(n_edge)
+            if nn < 1e-12:
+                continue
+            n_edge /= nn
+            F_mid   = 0.5 * (F_vec[i] + F_vec[j])
+            div_F[i]+= (F_mid @ n_edge) * d
+        div_F[i] /= area_cell
+
+    # Sparse Laplacian
+    A_mat = lil_matrix((N, N))
+    for i in range(N):
+        for j in neighbors[i]:
+            d_ij = (np.arccos(np.clip(n_hat[i] @ n_hat[j], -1, 1))
+                    * R_sphere)
+            if d_ij < 1e-12:
+                continue
+            w = 1.0 / d_ij**2
+            A_mat[i, j] +=  w
+            A_mat[i, i] -= w
+
+    rhs = div_F.copy()
+    A_mat[0, :] = 0;  A_mat[0, 0] = 1;  rhs[0] = 0
+
+    B_bern, info = minres(A_mat.tocsr(), rhs, rtol=1e-10, maxiter=20000)
+    if info != 0:
+        print(f'Warning: Poisson solver info={info}')
+    else:
+        print('Poisson solver converged')
+
+    # Set integration constant: background enthalpy + kinetic
+    h_bg         = gam / (gam - 1) * p_0 / rho_0
+    B_bern_bg    = h_bg + B0_amp**2 / (fourpi_H * rho_0) / 2.0
+    B_bern      += B_bern_bg - np.mean(B_bern)
+
+    # ----------------------------------------------------------------
+    # Step 5: Thermodynamic state from Bernoulli
+    #
+    # B_bern = v^2/2 + gam/(gam-1) Pi/Sigma + B^2/(4pi H Sigma)
+    # At linear order: B^2 term uses background B_bg only
+    # => h_ent = B_bern - v^2/2 - B_bg^2/(4pi H Sigma_0)
+    #          = gam/(gam-1) Pi/Sigma
+    # ----------------------------------------------------------------
+    B_bg_sq  = np.sum(B_bg**2, axis=1)
+    h_ent    = (B_bern
+                - v_sq / 2.0
+                - B_bg_sq / (fourpi_H * rho_0))
+
+    h_min = 0.5 * h_bg
+    n_clip = np.sum(h_ent < h_min)
+    if n_clip > 0:
+        print(f'Warning: clipping enthalpy at {n_clip} cells')
+    h_ent = np.maximum(h_ent, h_min)
+
+    rho = ((h_ent * (gam - 1)) / (gam * K_eos)) ** (1.0 / (gam - 1))
+    p   = K_eos * rho**gam
+
+    # ----------------------------------------------------------------
+    # Step 6: Magnetic perturbation from linearised induction
+    #
+    # For B_0 = B0_amp e_phi and wave ~ e^{i(m phi - omega t)}:
+    #
+    # delta_v x B_0 = (v_east e_phi + v_north e_lat) x (B0 e_phi)
+    #               = v_north B0 (e_lat x e_phi)
+    #               = v_north B0 (-n_hat)        [since e_lat x e_phi = -r̂]
+    #
+    # curl(-v_north B0 n_hat):
+    #   (curl F_r r̂)_colat = (1/R sin theta) d F_r / d phi
+    #   (curl F_r r̂)_phi   = -(1/R) d F_r / d theta
+    #
+    # F_r = -v_north * B0_amp
+    #
+    # => delta_B_colat = (1/(R sin theta)) * (-B0) * dv_north/dphi / (-i omega)
+    # => delta_B_phi   = (1/R) * B0 * dv_north/dtheta / (-i omega)
+    #
+    # For real wave (cosine mode), -i omega -> omega (90 deg phase shift)
+    # i.e., if v_north ~ sin(m phi), then dv_north/dphi ~ cos(m phi)
+    # ----------------------------------------------------------------
+
+    dv_north_dphi  = np.where(sin_colat > 1e-10,
+                              (1.0 / (R_sphere * sin_colat))
+                              * epsilon * (-m) * Pnm * cos_mphi,
+                              0.0)
+
+    # d/dtheta of v_north
+    # v_north = (epsilon / (R sin theta)) * (-m) * Pnm * sin(m phi)
+    # dv_north/dtheta involves d/dtheta [Pnm / sin(theta)]
+    # Use: d(Pnm/sinθ)/dθ = (dPnm/dθ * sinθ - Pnm cosθ) / sin²θ
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        dv_north_dth = np.where(
+            sin_colat > 1e-10,
+            (-epsilon * m / R_sphere) * (
+                (dPnm_dtheta * sin_colat - Pnm * cos_colat)
+                / sin_colat**2) * sin_mphi,
+            0.0)
+
+    # delta_B components (dividing by omega_MR for time derivative)
+    # -i omega delta_B = curl(delta_v x B0)
+    # => delta_B = curl(...) / (-i omega)
+    # For real fields: the 90-deg phase is handled by cos/sin switch
+
+    if abs(omega_MR) < 1e-14:
+        print('Warning: omega_MR ~ 0, magnetic perturbation set to zero')
+        dB_colat = np.zeros(N)
+        dB_phi   = np.zeros(N)
+    else:
+        # Note: dv_north/dphi already has the phi-derivative applied
+        # so this gives the phi-component of curl which drives dB_colat
+        dB_colat = (-B0_amp / omega_MR) * (
+                    (1.0 / R_sphere) * dv_north_dphi)
+        dB_phi   = ( B0_amp / omega_MR) * (
+                    (1.0 / R_sphere) * dv_north_dth)
+
+    # 3D magnetic perturbation
+    dB_vec   = dB_colat[:, None] * e_colat + dB_phi[:, None] * e_phi
+
+    # Total magnetic field
+    B_total  = B_bg + dB_vec
+
+    # Enforce r̂·B = 0 (field must be tangential)
+    B_total -= np.einsum('ij,ij->i', B_total, n_hat)[:, None] * n_hat
+
+    # ----------------------------------------------------------------
+    # Step 7: Angular momentum and energy
+    # ----------------------------------------------------------------
+    l = rho[:, None] * np.cross(face_centers, v)
+
+    B_sq = np.sum(B_total**2, axis=1)
+    E    = (p / (gam - 1)
+            + B_sq / (8 * np.pi * fourpi_H / (4*np.pi))
+            + rho * v_sq / 2.0)
+    # Simplified with 4pi*H = 1:
+    E    = p / (gam - 1) + B_sq / 2.0 + rho * v_sq / 2.0
+
+    # ----------------------------------------------------------------
+    # Step 8: Divergence of B check
+    #
+    # ∇_s · B = (1/sin theta) d(sin theta B_theta)/d theta
+    #           + (1/sin theta) dB_phi/dphi
+    # Check numerically via FV divergence on the mesh
+    # ----------------------------------------------------------------
+    divB = np.zeros(N)
+    for i in range(N):
+        ni = n_hat[i]
+        for j in neighbors[i]:
+            dr   = face_centers[j] - face_centers[i]
+            d    = np.linalg.norm(dr)
+            if d < 1e-12:
+                continue
+            n_edge = dr / d
+            n_edge -= (n_edge @ ni) * ni
+            nn = np.linalg.norm(n_edge)
+            if nn < 1e-12:
+                continue
+            n_edge /= nn
+            B_mid   = 0.5 * (B_total[i] + B_total[j])
+            divB[i]+= (B_mid @ n_edge) * d
+        divB[i] /= area_cell
+
+    # ----------------------------------------------------------------
+    # Diagnostics
+    # ----------------------------------------------------------------
+    c_s      = np.sqrt(gam * p / rho)
+    mach     = np.sqrt(v_sq) / c_s
+    v_A_arr  = np.sqrt(B_sq / (fourpi_H * rho))  # local Alfven speed
+
+    print(f'\n--- Initial data diagnostics ---')
+    print(f'Max Mach                 : {np.max(mach):.4f}  (target ~0.1)')
+    print(f'Max |v|                  : {np.max(np.sqrt(v_sq)):.6f}')
+    print(f'Max v_A                  : {np.max(v_A_arr):.6f}'
+          f'  ({np.max(v_A_arr)/c_s_target:.3f} c_s)')
+    print(f'rho variation            : '
+          f'{(np.max(rho)-np.min(rho))/rho_0*100:.4f}%')
+    print(f'EOS residual max         : '
+          f'{np.max(np.abs(p - K_eos*rho**gam)):.2e}')
+    print(f'Max |∇·B|                : {np.max(np.abs(divB)):.3e}'
+          f'  (should be << {B0_amp/R_sphere:.3e})')
+    print(f'Max |r̂·v|               : '
+          f'{np.max(np.abs(np.einsum("ij,ij->i",n_hat,v))):.2e}')
+    print(f'Max |r̂·B|               : '
+          f'{np.max(np.abs(np.einsum("ij,ij->i",n_hat,B_total))):.2e}')
+    print(f'|delta_B| / B0           : '
+          f'{np.max(np.linalg.norm(dB_vec,axis=1))/B0_amp:.4f}'
+          f'  (should be ~ epsilon = {epsilon})')
+
+    # ----------------------------------------------------------------
+    # Write output
+    # ----------------------------------------------------------------
+    pd.DataFrame(
+        np.column_stack([rho,
+                         l[:, 0],    l[:, 1],    l[:, 2],
+                         E,
+                         B_total[:,0], B_total[:,1], B_total[:,2]])
+    ).to_csv('input/input.dat', index=False, sep=' ', header=False)
+
+    return rho, v, p, B_total, l, E
+
+
+def track_magneto_rossby_phase(face_centers, p, B,
+                                n_wave=2, m_wave=2,
+                                lat_target=np.pi/4):
+    """
+    Measure phase and amplitude of the (n,m) magneto-Rossby mode
+    from pressure and magnetic field snapshots.
+
+    Returns (phase_p, amp_p, phase_B, amp_B) for comparison with
+    expected omega_MR * t propagation.
+    """
+    n_hat   = face_centers / np.linalg.norm(face_centers,
+                                             axis=1, keepdims=True)
+    sin_lat = n_hat[:, 2]
+    phi_arr = np.arctan2(n_hat[:, 1], n_hat[:, 0])
+
+    mask = np.abs(sin_lat - np.sin(lat_target)) < 0.15
+    if np.sum(mask) < 5:
+        return None
+
+    def fourier_phase(field, phi, m):
+        f   = field - np.mean(field)
+        A_m = np.mean(f * np.cos(m * phi))
+        B_m = np.mean(f * np.sin(m * phi))
+        return np.arctan2(B_m, A_m) / m, np.sqrt(A_m**2 + B_m**2)
+
+    phase_p, amp_p = fourier_phase(p[mask],    phi_arr[mask], m_wave)
+    B_phi = np.einsum('ij,ij->i',
+                      B, np.column_stack([-np.sin(phi_arr),
+                                           np.cos(phi_arr),
+                                           np.zeros(len(phi_arr))]))[mask]
+    phase_B, amp_B = fourier_phase(B_phi, phi_arr[mask], m_wave)
+
+    return phase_p, amp_p, phase_B, amp_B
 
 def make_input_5_sp_layer():
 
@@ -1739,11 +2184,174 @@ def make_input_5_const_entr():
 
 
 
+
+def make_input_6_polar_dense_spot():
+    face_centers = pd.read_table('results/face_centers.dat',
+                                  header=None, delimiter=r"\s+")
+    face_centers = np.array(face_centers)
+    # Normalize to unit sphere
+    face_centers = face_centers / np.linalg.norm(face_centers,
+                                                  axis=1, keepdims=True)
+    N = len(face_centers)
+
+
+    gam0=5./3
+    gam=2-1/gam0
+    Omega0  = 0.1     # frame rotation
+    a_target  = 2/300   
+    theta_c = 20 * np.pi / 180    
+
+
+    delta_theta=np.pi/4
+
+    rho0=1
+    rho=np.ones(N)*rho0
+    p0=a_target**2*rho0/gam
+    p=np.zeros(N)
+    l   = np.zeros((N, 3))  
+    v   = np.zeros((N, 3))  
+    # Colatitude of each cell
+
+    theta = np.arccos(np.clip(face_centers[:, 2], -1, 1))
+    #theta = np.arctan2(face_centers[:, 1], face_centers[:, 2])
+
+
+    p_fluc=0.5
+
+    
+
+    for i, R in enumerate(face_centers):
+        th = theta[i]
+
+        # Density profile (applied everywhere for smooth field)
+        p[i] = p0*(1.0 + p_fluc * np.tanh(3 - 8 * th))
+
+        #if th < theta_c:
+        # Geostrophic velocity:
+        # v_phi = (a^2 / (2*Omega0*cos(theta)*rho)) * d(rho)/d(theta)
+        # d(rho)/d(theta) = -0.8 / cosh^2(3-8*theta)
+
+        f = 2.0 * Omega0 * np.cos(th)   
+
+        # Guard against f -> 0 (shouldn't happen near pole but be safe)
+        if abs(f) < 1e-10:
+            continue
+
+        dp_dth = -8 * p_fluc / np.cosh(3 - 8 * th)**2
+
+        v_phi_magnitude = (a_target**2 / (f * rho[i])) * dp_dth
+        # v_phi < 0 => clockwise => anticyclonic (correct for dense spot)
+
+        # Zonal unit vector e_phi = (-sin(phi), cos(phi), 0)
+        phi   = np.arctan2(R[1], R[0])
+        e_phi = np.array([-np.sin(phi), np.cos(phi), 0.0])
+
+        v_vec = v_phi_magnitude * e_phi
+        # Angular momentum: l = rho * (R x v), R is unit vector here
+        l[i] = rho[i] * np.cross(R, v_vec)
+        v[i] = v_vec
+
+        # else: l[i] = 0 already (pre-allocated)
+
+    # Diagnostics
+    v_max = np.max(np.linalg.norm(-np.cross(face_centers,l) / rho[:, None], axis=1))
+    Ma    = v_max / a_target
+    f_pole = 2 * Omega0
+    L_R   = a_target / f_pole
+
+    E = 1/(gam-1)*p + rho*np.linalg.norm(v, axis=1)*np.linalg.norm(v, axis=1)/2
+
+    print(f'Max |v|      = {v_max:.5f}')
+    print(f'Max Mach     = {Ma:.4f}')
+    print(f'L_R (pole)   = {L_R:.4f}')
+    print(f'theta_c/L_R  = {theta_c/L_R:.2f}  (should be > 2 for coherent drift)')
+    print(f'p max/min  = {np.max(p):.4f} / {np.min(p):.4f}')
+    print(f'delta_p    = {(np.max(p)-1)*100:.2f}%')
+
+    pd.DataFrame(
+        np.column_stack([rho, l[:, 0], l[:, 1], l[:, 2], E, np.ones(len(face_centers))])
+    ).to_csv('input/input.dat', index=False, sep=' ', header=False)
+
+
+
+
+def make_input_6_cos_bell(): 
+
+    gam0=5/3
+    gam=2-1/gam0
+
+
+    face_centers=pd.read_table('results/face_centers.dat', header=None, delimiter=r"\s+")
+    N=len(face_centers[0])
+
+    face_centers=np.array(face_centers)/np.linalg.norm(np.array(face_centers), axis=1, keepdims=True)
+
+
+    l=[]
+    
+    theta=-np.arccos(face_centers[:,2])+np.pi/2 #lat
+    phi=np.arctan2(face_centers[:,1],face_centers[:,0]) #long
+
+
+    omega=np.array([0,0,0])
+
+    rho0=1
+    rho=np.ones(N)*rho0
+    #a_target=2/300
+    #a_target=1/50
+    a_target=1/30
+    p0=a_target**2*rho0/gam
+    p=np.ones(N)*p0
+    v=[]
+    a=1
+    R0=a/3
+
+    theta_c=np.pi/4
+    phi_c=np.pi/4
+
+    delta_rho=1
+
+    r=a*np.arccos(np.sin(theta_c)*np.sin(theta)+np.cos(theta)*np.cos(theta_c)*np.cos(phi-phi_c))
+
+    for face_num, R in enumerate(face_centers):
+        
+        
+        if r[face_num]<2*R0:
+            #rho[face_num]+=delta_rho*np.cos(np.pi*r[face_num]/R0)
+            rho[face_num]=rho0*(1.0 + delta_rho  * np.exp(-(r[face_num]/(np.sqrt(2)*R0))**2 ))
+
+
+        l.append(rho[face_num]*np.cross(R,np.cross(omega,R))/(np.linalg.norm(R)**2))
+        v.append(np.cross(omega,R/np.linalg.norm(R)))
+    
+
+    l=np.array(l)
+    v=np.array(v)
+
+    a=11e5
+    m_alpha=6.65e-24
+    k_b=1.3807e-16
+    g=0.217909*1e18/(3.3e-5*3.3e-5*a*a)
+    T=m_alpha/k_b * (p*9e27)**2 / ( g*(rho*1e7)**3)
+    print('mean log10 T:', np.mean(np.log10(T)), ' K')
+    print('mean rho:', np.mean(g*rho**2*1e14/(gam*p*9e27)), ' g/cm^3')
+
+
+    theta=np.arccos(face_centers[:,2])
+
+    E=1/(gam-1)*p+rho*np.linalg.norm(v, axis=1)*np.linalg.norm(v, axis=1)/2
+
+    pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E, np.ones(len(face_centers))]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
+
+
 #make_input_5_new_p()
 #make_input_5()
 #make_input_5_B()
+#make_input_magneto_rossby(n_wave=2, m_wave=2, B0_frac=1e-3,epsilon=0.01)
 #make_input_rossby_haurwitz(n_wave=4, omega_rh_frac=0.1, K_frac=0.1)
-make_input_5_coriolis()
+
+#make_input_5_coriolis()
+
 #make_input_geostrophic_pressure_first2()
 #make_input_geostrophic_coriolis()
 #make_input_balanced_cyclone()
@@ -1752,7 +2360,17 @@ make_input_5_coriolis()
 #make_input_5_sp_layer_exp()
 #make_input_5_sp_layer_diff_rot()
 #make_input_4()
+
+#make_input_4_polar_dense_spot()
+#make_input_5_polar_dense_spot()
+
+#make_input_6_polar_dense_spot()
+make_input_6_cos_bell()
+
+#make_input_4_cyclone(omega_cyclone=-0.05)
+
 #make_input_6_cos_bell()
+
 
 
 

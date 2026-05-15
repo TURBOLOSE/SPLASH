@@ -10,8 +10,9 @@ using namespace pmp;
 
 int main()
 {
-    // SurfaceMesh mesh = uv_sphere(50,50);
-    //SurfaceMesh mesh = quad_sphere(5);
+    //SurfaceMesh mesh = uv_sphere(65,128);
+    //SurfaceMesh mesh = uv_sphere(128,65);
+    //SurfaceMesh mesh = quad_sphere(6);
     //SurfaceMesh mesh = icosphere(5);
     SurfaceMesh mesh = icosphere_hex(5);
 
@@ -93,11 +94,11 @@ int main()
         }
     }
 
-    // MUSCL_HLLE test2(mesh, U_in, DIM, gam, threads);
-    // MUSCL_HLLE_p test2(mesh, U_in, DIM, gam,omega_ns, threads);
+    //MUSCL_HLLE test2(mesh, U_in, gam, threads);
+    //MUSCL_HLLE_p test2(mesh, U_in, gam,omega_ns, threads);
     MUSCL_HLLC test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
     //MUSCL_HLLCplus test2(mesh, U_in, gam, omega_ns, accretion_on, threads);
-   //MUSCL_HLLD test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
+    //MUSCL_HLLD test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
 
 
     test2.set_time(t_0);
@@ -110,15 +111,18 @@ int main()
 
     test2.write_t_rho();
     test2.write_t_p();
-    test2.write_t_betas();
+    //test2.write_t_betas();
     test2.write_t_curl();
     test2.write_t_omega_z();
     test2.write_t_L();
     test2.write_t_mach();
 
-    if(test2.get_m_field_on()){
-        test2.write_t_B();
-    }
+    //if(test2.get_m_field_on()){
+    //    test2.write_t_B();
+   // }
+
+   if(test2.get_nuclear_burning_on())
+   test2.write_t_Y();
 
 
 
@@ -135,17 +139,15 @@ int main()
     out_lc_180.flush();
 
 
-    out_deltaE<< "t, en_gain_acc, en_loss_fall, en_loss_fric, en_loss_rad \n";
+    // out_deltaE<< "t, en_gain_acc, en_loss_fall, en_loss_fric, en_loss_rad \n";
 
-    en_changes=test2.get_energy_changes();
-    out_deltaE<<test2.time() << " "<<en_changes[0]<< " "<<en_changes[1]
-    << " "<<en_changes[2]<< " "<<en_changes[3]<<"\n";
-    out_deltaE.flush();
+    // en_changes=test2.get_energy_changes();
+    // out_deltaE<<test2.time() << " "<<en_changes[0]<< " "<<en_changes[1]
+    // << " "<<en_changes[2]<< " "<<en_changes[3]<<"\n";
+    // out_deltaE.flush();
     
 
-    // test2.write_t_tracer();
 
-    // for (size_t i = 0; i < maxstep; i++)
     size_t steps = 0;
     while (test2.time() < t_max && steps < maxstep)
     {
@@ -162,10 +164,10 @@ int main()
         out_lc_180.flush();
 
 
-        en_changes=test2.get_energy_changes();
-        out_deltaE<<test2.time() << " "<<en_changes[0]<< " "<<en_changes[1]
-        << " "<<en_changes[2]<< " "<<en_changes[3]<<"\n";
-        out_deltaE.flush();
+        // en_changes=test2.get_energy_changes();
+        // out_deltaE<<test2.time() << " "<<en_changes[0]<< " "<<en_changes[1]
+        // << " "<<en_changes[2]<< " "<<en_changes[3]<<"\n";
+        // out_deltaE.flush();
 
 
         if (steps % skipstep == 0)
@@ -176,12 +178,15 @@ int main()
             test2.write_t_curl();
             test2.write_t_omega_z();
             test2.write_t_L();
-            test2.write_t_betas();
+            //test2.write_t_betas();
             test2.write_t_mach();
 
-            if(test2.get_m_field_on()){
-                test2.write_t_B();
-            }
+            // if(test2.get_m_field_on()){
+            //     test2.write_t_B();
+            // }
+
+            if(test2.get_nuclear_burning_on())
+            test2.write_t_Y();
         }
 
         if (test2.get_stop_check())
@@ -192,18 +197,21 @@ int main()
             test2.write_t_curl();
             test2.write_t_omega_z();
             test2.write_t_L();
-            test2.write_t_betas();
+            //test2.write_t_betas();
             test2.write_t_mach();
-            if(test2.get_m_field_on()){
-                test2.write_t_B();
-            }
+            // if(test2.get_m_field_on()){
+            //     test2.write_t_B();
+            // }
+
+            if(test2.get_nuclear_burning_on())
+            test2.write_t_Y();
             break;
         }
 
         steps++;
     }
 
-    test2.write_final_state();
+    //test2.write_final_state();
 
     return 0;
 }

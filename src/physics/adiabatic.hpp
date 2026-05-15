@@ -10,7 +10,7 @@ class adiabatic : public MUSCL_base
 //StateVec
 protected:
     std::vector<double> betas;
-    std::ofstream outfile, outfile_p, outfile_omega, outfile_curl, outfile_beta, outfile_mach;
+    std::ofstream outfile, outfile_p, outfile_omega, outfile_curl, outfile_beta, outfile_mach, outfile_Y;
     std::ofstream outfile_l[3], outfile_B[3];
     bool accretion_on, friction_on, smooth_acc_on, extra_heat_on;
     double total_mass, acc_rate, e_acc, omega_acc_abs, tilt_angle, acc_width, area_coeff, alpha, t_acc, extra_heat_power;
@@ -31,16 +31,13 @@ public:
         betas.resize(nf);
 
         set_analytical_solution();
-        if (DIM != 5 && DIM != 8)
+        if (DIM != 5 && DIM != 8 && DIM != 6)
         {
             std::cout << "check DIM \n";
             stop_check = true;
             exit(1);
         }
 
-        omega0[0] = 0;
-        omega0[1] = 0;
-        omega0[2] = omega_ns;
 
 
         // clean file and append next line
@@ -67,6 +64,10 @@ public:
         outfile_mach.open("results/mach.dat", std::ios::out | std::ios::trunc);
         outfile_mach.close();
         outfile_mach.open("results/mach.dat", std::ios::out | std::ios::app);
+
+        outfile_Y.open("results/Y.dat", std::ios::out | std::ios::trunc);
+        outfile_Y.close();
+        outfile_Y.open("results/Y.dat", std::ios::out | std::ios::app);
 
         std::string adrs[] = {"results/Lx.dat", "results/Ly.dat", "results/Lz.dat"};
         std::string adrs_B[] = {"results/Bx.dat", "results/By.dat", "results/Bz.dat"};
@@ -146,6 +147,19 @@ public:
             // out_lc<< U_i[0] << " ";
         }
         outfile << "\n";
+    };
+
+        void write_t_Y()
+    {
+        outfile_Y << this->time() << "  ";
+        size_t nf=this->n_faces();
+        for (size_t n_face = 0; n_face < nf; n_face++)
+        {
+
+
+            outfile_Y << U[n_face][5] << " ";
+        }
+        outfile_Y << "\n";
     };
 
     void write_t_betas()
@@ -351,37 +365,70 @@ public:
             vel = cross_product(face_centers[n_face] / face_centers[n_face].norm(), l_vec);
             vel /= (-U[n_face][0]);
             PI = pressure(U[n_face], vel, face_centers[n_face] / face_centers[n_face].norm());
+            double E=PI;
+
+            if(nuclear_burning_on && DIM==6){
+
+                double Q0=5.3e21;
+                //double rho5=U[n_face][0]*100;
+                double kappa0=3.4e6; //opacity 0.34 cm^2/g
+                double y=1; //col depth test
+                double m_alpha=6.65e-24; // mass of alpha particle in g
+                double k_b=1.3807e-16; // Boltzmann constant in erg/K
+                double c=3e10; // speed of light in cm/s
+                double a=11e5; //radius in cm
+                double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); //
+                double eps_alpha=5.84e17; // erg/cm^3
+
+                double rho5=g*U[n_face][0]*U[n_face][0]*1e14/(gam*PI*9e27)/1e5; // density in 10^5 g/cm^3
+
+
+                double T8=m_alpha/k_b * pow(PI *9e27,2)/(g*pow(U[n_face][0]*1e7,3))/1e8; // temperature in 10^8 K
+                //std::cout<<T8<<"\n";
+
+                double Q=a*c*pow(T8*1e8,4)/(3*kappa0*y); //cgs units
+
+
+                double dQ_dt =Q*U[n_face][0]/9e27*3.3e-5; //back to code units * sigma
+                
+
+                E=dQ_dt;
+                //if(dt_new> std::abs(10* U[i][4]/dQ_dt))
+                 //   dt_new=std::abs(10* U[i][4]/dQ_dt);
+
+            }
+            
 
             if (phi_fc < M_PI / 2 && phi_fc > -M_PI / 2)
             {
                 d_vec = dot_product(obs_vector_0, face_centers[n_face] / face_centers[n_face].norm());
                 cos_alpha = std::abs(d_vec) / obs_vector_0.norm();
-                flux_tot_0 += PI * cos_alpha * surface_area[n_face];
-                // flux_tot_0+=E*cos_alpha*surface_area[n_face];
+                //flux_tot_0 += PI * cos_alpha * surface_area[n_face];
+                 flux_tot_0+=E*cos_alpha*surface_area[n_face];
             }
 
             if (theta_fc < M_PI / 2)
             {
                 d_vec = dot_product(obs_vector_90, face_centers[n_face] / face_centers[n_face].norm());
                 cos_alpha = std::abs(d_vec) / obs_vector_90.norm();
-                flux_tot_90 += PI * cos_alpha * surface_area[n_face];
-                // flux_tot_90+=E*cos_alpha*surface_area[n_face];
+                //flux_tot_90 += PI * cos_alpha * surface_area[n_face];
+                 flux_tot_90+=E*cos_alpha*surface_area[n_face];
             }
 
             if (dot_product(obs_vector_45, face_centers[n_face] / face_centers[n_face].norm()) > 0)
             {
                 d_vec = dot_product(obs_vector_45, face_centers[n_face] / face_centers[n_face].norm());
                 cos_alpha = std::abs(d_vec) / obs_vector_45.norm();
-                flux_tot_45 += PI * cos_alpha * surface_area[n_face];
-                // flux_tot_45+=E*cos_alpha*surface_area[n_face];
+                //flux_tot_45 += PI * cos_alpha * surface_area[n_face];
+                flux_tot_45+=E*cos_alpha*surface_area[n_face];
             }
 
             if (theta_fc > M_PI / 2)
             {
                 d_vec = dot_product(obs_vector_180, face_centers[n_face] / face_centers[n_face].norm());
                 cos_alpha = std::abs(d_vec) / obs_vector_180.norm();
-                flux_tot_180 += PI * cos_alpha * surface_area[n_face];
-                // flux_tot_180+=E*cos_alpha*surface_area[n_face];
+                //flux_tot_180 += PI * cos_alpha * surface_area[n_face];
+                flux_tot_180+=E*cos_alpha*surface_area[n_face];
             }
         }
 
@@ -460,9 +507,11 @@ protected:
         double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
         double H = (2*gam-1)/(gam-1)*PI/(u_in[0]*g_eff);
 
+
         if(mag_field_on){
             B[0]=u_in[5]; B[1]=u_in[6]; B[2]=u_in[7];
             nxB=cross_product(edge_center, B);
+            PI+=B.norm()*B.norm()/(8*M_PI);
         }
 
         ndv = dot_product(edge_normals[n_face][n_edge], vel);
@@ -476,9 +525,9 @@ protected:
 
     
         if(mag_field_on){
-            res[1]=(u_in[1] * ndv - nxR[0] * (PI)+nxB[0]*B.norm()/H);
-            res[2]=(u_in[2] * ndv - nxR[1] * (PI)+nxB[1]*B.norm()/H);
-            res[3]=(u_in[3] * ndv - nxR[2] * (PI)+nxB[2]*B.norm()/H);
+            res[1]=(u_in[1] * ndv - nxR[0] * (PI)+nxB[0]*B.norm()/(8*M_PI*H));
+            res[2]=(u_in[2] * ndv - nxR[1] * (PI)+nxB[1]*B.norm()/(8*M_PI*H));
+            res[3]=(u_in[3] * ndv - nxR[2] * (PI)+nxB[2]*B.norm()/(8*M_PI*H));
             res[4] = (u_in[4] + PI) * ndv
             - dot_product(B, vel)*dot_product(B, edge_normals[n_face][n_edge])/mu0/H;
 
@@ -495,6 +544,9 @@ protected:
             res[4] = (u_in[4] + PI) * ndv;
         }
 
+        if(nuclear_burning_on)
+            res[5]=u_in[0] * u_in[5] * ndv; //Sigma Y transfer
+
         return res;
     }
 
@@ -510,7 +562,7 @@ protected:
         static double total_mass_gain = 0, total_mass_gain_old = 0;
         static double total_mass_loss = 0;
         StateVec res;
-        vector3d<double> l_vec, vel, vel_dot, omega_acc, omxr, rxv, fc_normed, l_fr, wr, vel0, omxv, rxomxv, omxomxr, rxomxomxr;
+        vector3d<double> l_vec, vel, vel_dot, omega_acc, omxr, rxv, fc_normed, l_fr, wr, vel0, omxv, rxomxv, omxomxr, rxomxomxr,B;
 
         for (size_t i = 0; i < DIM; i++)
             res[i] = 0;
@@ -618,34 +670,64 @@ protected:
             res[3] -= u[0]*rxomxomxr[2];*/
 
             rxomxv = cross_product(fc_normed, omxv);
-            res[1] -= 2*u[0]*rxomxv[0];
-            res[2] -= 2*u[0]*rxomxv[1];
-            res[3] -= 2*u[0]*rxomxv[2];
+            res[1] = -2*u[0]*rxomxv[0];
+            res[2] = -2*u[0]*rxomxv[1];
+            res[3] = -2*u[0]*rxomxv[2];
 
 
-            const double theta_c=0.4;
-            const double phi_c=0.5;
-            const double R0=2./3;
-            const double heatpwr=2e-4;
+            // const double theta_c=M_PI/4;
+            // const double phi_c=M_PI/4;
+            // const double R0=2./11;
+            // //const double R0=2./5;
+            // //const double R0=0.15;
+            // //const double heatpwr=5e-5;
+            // //const double heatpwr=2e-4;
+            // //const double heatpwr=2e-3;
+            // //const double heatpwr=4e-4;
+            // //const double heatpwr=8e-4;
 
-            //Gaussian heat source for test
-            double lon=-theta+M_PI/2;
-            //np.arccos(np.sin(theta_c)*np.sin(lon)+np.cos(lon)*np.cos(theta_c)*np.cos(phi-phi_c))
-            double r=2*std::acos(std::sin(theta_c)*std::sin(lon)+std::cos(lon)*std::cos(theta_c)*std::cos(phi-phi_c));
 
-            if(r<R0){
 
-                res[4] +=  heatpwr * std::exp(-r*r/(2*R0*R0));
+            // const double heatpwr=8e-3;
 
-                res[0] += pow(heatpwr * std::exp(-r*r/(2*R0*R0))/(gam_0-1),1/gam_0);
-            }
+            // //Gaussian heat source for test
+            // double lon=-theta+M_PI/2;
+            // //np.arccos(np.sin(theta_c)*np.sin(lon)+np.cos(lon)*np.cos(theta_c)*np.cos(phi-phi_c))
+            // double r=2*std::acos(std::sin(theta_c)*std::sin(lon)+std::cos(lon)*std::cos(theta_c)*std::cos(phi-phi_c));
             
-            //res[4] +=
 
 
-            //res[4] -= u[0] * dv_cor;
 
         }
+
+        if(nuclear_burning_on && DIM==6){
+
+            double Q0=5.3e21;
+            double kappa0=3.4e6; //opacity 0.34 cm^2/g
+            double y=1e8; //col depth test
+            double m_alpha=6.65e-24; // mass of alpha particle in g
+            double k_b=1.3807e-16; // Boltzmann constant in erg/K
+            double c=3e10; // speed of light in cm/s
+            double a=11e5; //radius in cm
+            double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); 
+            double eps_alpha=5.84e17; // erg/cm^3
+
+            double rho5=g*u[0]*u[0]*1e14/(gam*u[4]*9e27)/1e5; // density in 10^5 g/cm^3
+
+
+            double T8=m_alpha/k_b * pow(u[4]*9e27,2)/(g*pow(u[0]*1e7,3))/1e8; // temperature in 10^8 K
+            //std::cout<<T8<<"\n";
+
+            double Q=Q0*rho5*rho5*pow(u[5],3)/pow(T8,3)*exp(-44.027/T8) - a*c*pow(T8*1e8,4)/(3*kappa0*y); //cgs units
+            
+            res[4]+=Q*u[0]/9e27*3.3e-5; //back to code units * sigma
+
+            //res[5]+=Q*3*m_alpha/eps_alpha;
+            res[5]-=Q0*rho5*rho5*pow(u[5],3)/pow(T8,3)*exp(-44.027/T8)*3*m_alpha/eps_alpha*u[0];
+
+
+        }
+
 
         double adj_coeff = 1.00045; // just in case of small mass error
         if (accretion_on)
@@ -1022,6 +1104,38 @@ protected:
                     
                     
                 }
+
+
+
+            if(nuclear_burning_on && DIM==6){
+
+                double Q0=5.3e21;
+                //double rho5=U[i][0]*100;
+                double kappa0=3.4e6; //opacity 0.34 cm^2/g
+                double y=1; //col depth test
+                double m_alpha=6.65e-24; // mass of alpha particle in g
+                double k_b=1.3807e-16; // Boltzmann constant in erg/K
+                double c=3e10; // speed of light in cm/s
+                double a=11e5; //radius in cm
+                double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); //
+                double eps_alpha=5.84e17; // erg/cm^3
+
+
+                double rho5=g*U[i][0]*U[i][0]*1e14/(gam*press*9e27)/1e5; // density in 10^5 g/cm^3
+
+
+                double T8=m_alpha/k_b * pow(press *9e27,2)/(g*pow(U[i][0]*1e7,3))/1e8; // temperature in 10^8 K
+                //std::cout<<T8<<"\n";
+
+                double Q=Q0*rho5*rho5*pow(U[i][5],3)/pow(T8,3)*exp(-44.027/T8) - a*c*pow(T8*1e8,4)/(3*kappa0*y); //cgs units
+
+
+                double dQ_dt =Q*U[i][0]/9e27*3.3e-5; //back to code units * sigma
+
+                //if(dt_new> std::abs(10* U[i][4]/dQ_dt))
+                 //   dt_new=std::abs(10* U[i][4]/dQ_dt);
+
+            }
             
         }
         
@@ -1046,6 +1160,10 @@ protected:
         //double pressure_floor = 1e-16;
         double gam_0 = make_gam(u, r);
                 
+        double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+        double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
+        double H=(2*gam_0-1)/(gam_0-1)*u[4]/(u[0]*g_eff);
+
         /*if(non_inertial_rf_on){
             vel += cross_product(omega0, r/r.norm());
         }*/
@@ -1062,13 +1180,13 @@ protected:
         // else
         // {
 
-        double res=(u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1);
+        double res=(u[4] - u[0] * (vel.norm() * vel.norm()) / 2*H) * (gam_0 - 1);
 
         if(mag_field_on){
             vector3d<double> B;
             B[0]=u[5]; B[1]=u[6]; B[2]=u[7];
 
-            res -= B.norm()*B.norm()/2*(gam_0 - 1);
+            res -= B.norm()*B.norm()/(8*M_PI)*(gam_0 - 1);
         }
 
             return std::max(pressure_floor, res); // v4 = compressed star new gamma
@@ -1087,6 +1205,8 @@ protected:
         {
             n_edge_1 = 0;
         }
+
+
 
         edge_center_r = (vertices[faces[n_face][n_edge]] + vertices[faces[n_face][n_edge_1]]) / 2.;
         edge_center_l = (vertices[faces[n_face][n_edge]] + vertices[faces[n_face][n_edge_1]]) / 2.;
@@ -1108,6 +1228,9 @@ protected:
         vel_r = cross_product(edge_center_r, vec_r);
         vel_r /= (-u_R[0]) * edge_center_r.norm();
 
+
+
+
         // p_L = (u_L[4] - u_L[0] * vel_l.norm() * vel_l.norm() / 2) * (gam - 1);
         // p_R = (u_R[4] - u_R[0] * vel_r.norm() * vel_r.norm() / 2) * (gam - 1);
 
@@ -1123,6 +1246,7 @@ protected:
         double gam_L = gam;
         double gam_R = gam;
 
+
         double z = (gam - 1) / (2 * gam);
 
         if (var_gamma)
@@ -1133,34 +1257,43 @@ protected:
         }
 
 
+
+
+
         if(mag_field_on){
-        vector3d<double> B_L, B_R;
-        B_L[0] = u_L[5]; B_L[1] = u_L[2]; B_L[2] = u_L[7];
-        B_R[0] = u_R[5]; B_R[1] = u_R[6]; B_R[2] = u_R[7];
+            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+            double g_eff_L = std::max(GM - vel_l.norm() * vel_l.norm(),0.);
+            double H_L = (2*gam-1)/(gam_L-1)*p_L/(u_L[0]*g_eff_L);
+            double g_eff_R = std::max(GM - vel_r.norm() * vel_r.norm(),0.);
+            double H_R = (2*gam-1)/(gam_R-1)*p_R/(u_R[0]*g_eff_R);
 
-        double B_n_L = dot_product(B_L, edge_normals[n_face][n_edge]);
-        double B_n_R = dot_product(B_R, edge_normals[n_face][n_edge]);
-        double B_mag_L = B_L.norm();
-        double B_mag_R = B_R.norm();
+            vector3d<double> B_L, B_R;
+            B_L[0] = u_L[5]; B_L[1] = u_L[2]; B_L[2] = u_L[7];
+            B_R[0] = u_R[5]; B_R[1] = u_R[6]; B_R[2] = u_R[7];
 
-        double mu0 = 1.0;  // Check units in your system
+            double B_n_L = dot_product(B_L, edge_normals[n_face][n_edge]);
+            double B_n_R = dot_product(B_R, edge_normals[n_face][n_edge]);
+            double B_mag_L = B_L.norm();
+            double B_mag_R = B_R.norm();
 
-        double a2_L = gam_L * p_L / u_L[0];
-        double c_A2_L = B_mag_L * B_mag_L / u_L[0];
-        double c_fast_L = std::sqrt(0.5 * (a2_L + c_A2_L + 
-                    std::sqrt((a2_L + c_A2_L)*(a2_L + c_A2_L) - 4*a2_L*B_n_L*B_n_L/u_L[0])));
+            double mu0 = 1.0;  // Check units in your system
 
-        double a2_R = gam_R * p_R / u_R[0];
-        double c_A2_R = B_mag_R * B_mag_R / u_R[0];
-        double c_fast_R = std::sqrt(0.5 * (a2_R + c_A2_R + 
-                    std::sqrt((a2_R + c_A2_R)*(a2_R + c_A2_R) - 4*a2_R*B_n_R*B_n_R/u_R[0])));
+            double a2_L = gam_L * p_L / u_L[0];
+            double c_A2_L = B_mag_L * B_mag_L / (4*M_PI*u_L[0]*H_L);
+            double c_fast_L = std::sqrt(0.5 * (a2_L + c_A2_L + 
+                        std::sqrt((a2_L + c_A2_L)*(a2_L + c_A2_L) - 4*a2_L*B_n_L*B_n_L/u_L[0])));
 
-        a_L = c_fast_L;
-        a_R = c_fast_R;
+            double a2_R = gam_R * p_R / u_R[0];
+            double c_A2_R = B_mag_R * B_mag_R / (4*M_PI*u_R[0]*H_R);
+            double c_fast_R = std::sqrt(0.5 * (a2_R + c_A2_R + 
+                        std::sqrt((a2_R + c_A2_R)*(a2_R + c_A2_R) - 4*a2_R*B_n_R*B_n_R/u_R[0])));
+
+            a_L = c_fast_L;
+            a_R = c_fast_R;
         }else
         {
-        a_L = std::sqrt(gam_L * p_L / u_L[0]);
-        a_R = std::sqrt(gam_R * p_R / u_R[0]);
+            a_L = std::sqrt(gam_L * p_L / u_L[0]);
+            a_R = std::sqrt(gam_R * p_R / u_R[0]);
         }
         // double p_star=std::pow((a_L+a_R-(gam-1)/2. * (dot_product(edge_normals[n_face][n_edge], vel_r)-dot_product(edge_normals[n_face][n_edge], vel_l)))
         //  /( a_L/std::pow(p_L,z) + a_R/std::pow(p_R,z) ),1./z);

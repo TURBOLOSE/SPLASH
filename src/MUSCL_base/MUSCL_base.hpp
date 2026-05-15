@@ -6,7 +6,8 @@
 #include <array>
 
 //constexpr size_t DIM = 8;
-constexpr size_t DIM = 5;
+constexpr size_t DIM = 6;
+//constexpr size_t DIM = 4;
 using StateVec = std::array<double, DIM>;
 
 
@@ -17,9 +18,9 @@ protected:
     std::vector<double> rho_an, p_an;
     std::vector<std::vector<StateVec>> flux_var_plus, flux_var_minus, U_plus, U_minus;
     // flux_var^plus_ij flux_var^minus_ij, U_ij (short), U_ji(short)
-    double dt, gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, density_floor, pressure_floor, CFL;
+    double dt, gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, density_floor, Y_floor, pressure_floor, CFL,a, min_dt=1e-10;
     int implicit_iternum;
-    bool var_gamma, implicit_solve_on, non_inertial_rf_on, mag_field_on, centrifugal_force_on;
+    bool var_gamma, implicit_solve_on, non_inertial_rf_on, mag_field_on, centrifugal_force_on, nuclear_burning_on;
     size_t steps, threads;
     double omega_ns;
     bool stop_check = false;
@@ -81,14 +82,24 @@ public:
         non_inertial_rf_on = parameters["non_inertial_rf_on"];
         mag_field_on = parameters["magnetic_field_on"];
         centrifugal_force_on = parameters["centrifugal_force_on"];
+        a=parameters["a_isothermal"];
+        omega_ns = parameters["omega_ns"];
+        nuclear_burning_on = parameters["nuclear_burning_on"];
+
+
 
 
         if(mag_field_on && DIM!=8){
-            std::cout<<"magnetic field on but DIM is not 8, check parameters.json \n";
+            std::cout<<"magnetic field on but DIM is not 8, check MUSCL_base.hpp \n";
             stop_check=true;
             exit(1);
         }
 
+        if(nuclear_burning_on && DIM!=6){
+            std::cout<<"nuclear burning on but DIM is not 6, check MUSCL_base.hpp \n";
+            stop_check=true;
+            exit(1);
+        }
         
         omega0[0] = 0;
         omega0[1] = 0;
@@ -145,6 +156,7 @@ public:
 
         density_floor = min_rho * 1e-9;
         pressure_floor = min_p * 1e-9;
+        Y_floor=0;
     };
 
 
@@ -171,6 +183,14 @@ public:
 
         if (dt > extra_dt)
             dt = extra_dt;
+
+        if(dt<min_dt)
+        {
+            std::cout<<"dt is too small, simulation stopped \n";
+            stop_check=true;
+            exit(1);
+        }
+        
 
         if (implicit_solve_on)
         {
@@ -225,6 +245,12 @@ public:
 
                 if (U[i][0] < density_floor)
                     U[i][0] = density_floor; // density floor
+
+                if(DIM==6){
+                    if(U[i][5] < Y_floor)
+                        U[i][5] = Y_floor;
+                }
+
             }
 
             find_U_edges();
@@ -240,6 +266,11 @@ public:
                 }
                 if (U[i][0] < density_floor)
                     U[i][0] = density_floor; // density floor
+
+                if(DIM==6){
+                    if(U[i][5] < Y_floor)
+                        U[i][5] = Y_floor;
+                }
             }
 
             
@@ -369,6 +400,11 @@ public:
     { // True = stop computations due to error
         return mag_field_on;
     }
+    bool get_nuclear_burning_on()
+    { // True = stop computations due to error
+        return nuclear_burning_on;
+    }
+
 
 protected:
     void res2d(double dt_here) // space step
@@ -521,15 +557,22 @@ private:
 
             if(mag_field_on){
             vector3d<double> B;
-            B[0] = U[i][5]; B[1] = U[i][2]; B[2] = U[i][7];
+                B[0] = U[i][5]; B[1] = U[i][2]; B[2] = U[i][7];
 
-            double B_mag = B.norm();
+                double B_mag = B.norm();
+                double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+                double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
+                double H = (2*gam-1)/(gam-1)*p/(rho*g_eff);
 
-            c_s=std::max(std::sqrt(gam_0 * p / rho), std::sqrt(B_mag * B_mag / (4*M_PI*rho)));
+
+                c_s=std::max(std::sqrt(gam_0 * p / rho), std::sqrt(B_mag * B_mag / (4*M_PI*rho*H)));
+
+            }else if(DIM==4){
+                c_s=a;
 
             }else
-            {
-            c_s = std::sqrt(gam_0 * p / rho);
+                {
+                c_s = std::sqrt(gam_0 * p / rho);
 
             }
 
@@ -580,12 +623,14 @@ private:
         size_t nf=this->n_faces();
         for (size_t i = 0; i < nf; i++) // tag1
         {
-            U[i][4] = pressure_fc(U[i], i);
 
             U[i][0] -= rho_an[i];
-            U[i][4] -= p_an[i];
+
+            if(DIM!=4){
+                U[i][4] = pressure_fc(U[i], i);
+                U[i][4] -= p_an[i];
+            }
         }
-        // std::cout<<rho_an[0]<<" "<<p_an[0]<<"\n";
 
         omp_set_dynamic(0);           // Explicitly disable dynamic teams
         omp_set_num_threads(threads); // Use threads for all consecutive parallel regions
@@ -720,7 +765,12 @@ private:
     }
 
     double pressure_fc(StateVec &u, int n_face) // u[4] == energy
-    {                                                      // to do: make state_vector a class and turn this into a method
+    {                   
+        
+        if(DIM==4){
+
+            return u[0]*a*a;
+        }        
         vector3d<double> l_vec, vel, r;
         // double pressure_floor = 1e-16;
         l_vec[0] = u[1];
@@ -746,6 +796,9 @@ private:
         // double gam_0 = make_gam(u, r);
 
         double gam_0 = gam;
+        double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+        double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
+        double H=(2*gam_0-1)/(gam_0-1)*u[4]/(u[0]*g_eff);
 
         if (var_gamma)
         {
@@ -803,7 +856,7 @@ private:
             vector3d<double> B;
             B[0]=u[5]; B[1]=u[6]; B[2]=u[7];
 
-            res -= B.norm()*B.norm()/2*(gam_0 - 1);
+            res -= B.norm()*B.norm()/(8*M_PI*H)*(gam_0 - 1);
         }
 
 
@@ -835,10 +888,13 @@ private:
 
         double gam_0 = gam;
 
+        double GM = 0.217909;
+        double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
+        double H=(2*gam_0-1)/(gam_0-1)*u[4]/(u[0]*g_eff);
+
         if (var_gamma)
         {
-            double GM = 0.217909;
-            double g_eff = GM - vel.norm() * vel.norm();
+
             double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
             double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
             // new expression for C
@@ -846,6 +902,8 @@ private:
             double beta_switch = 0.736194670678821; // switch point for initial function
             double C_switch = -1 - 1 / (beta_switch - 1);
             double beta;
+
+
 
     
             if (C <= C_switch)
@@ -884,7 +942,7 @@ private:
         if(mag_field_on){
         vector3d<double> B;
         B[0]=u[5]; B[1]=u[6]; B[2]=u[7];
-        res+=B.norm()*B.norm()/2;
+        res+=B.norm()*B.norm()/(8*M_PI*H);
         }
 
         return res;
