@@ -14,7 +14,7 @@ protected:
     std::ofstream outfile_l[3], outfile_B[3];
     bool accretion_on, friction_on, smooth_acc_on, extra_heat_on;
     double total_mass, acc_rate, e_acc, omega_acc_abs, tilt_angle, acc_width, area_coeff, alpha, t_acc, extra_heat_power;
-    double en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o;
+    double en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o, en_gain_burning_o;
 
 
 public:
@@ -157,7 +157,7 @@ public:
         {
 
 
-            outfile_Y << U[n_face][5] << " ";
+            outfile_Y << U[n_face][5]/U[n_face][0] << " ";
         }
         outfile_Y << "\n";
     };
@@ -371,30 +371,36 @@ public:
 
                 double Q0=5.3e21;
                 //double rho5=U[n_face][0]*100;
-                double kappa0=3.4e6; //opacity 0.34 cm^2/g
-                double y=1; //col depth test
+                double kappa0=0.03; //opacity 0.34 cm^2/g
+                //double y=1; //col depth test
                 double m_alpha=6.65e-24; // mass of alpha particle in g
                 double k_b=1.3807e-16; // Boltzmann constant in erg/K
                 double c=3e10; // speed of light in cm/s
                 double a=11e5; //radius in cm
                 double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); //
-                double eps_alpha=5.84e17; // erg/cm^3
+                double eps_alpha=1.17e-5; // erg
+                double a0=7.56e-15; //erg/(cm^3 k^4)
+                double Y=U[n_face][5]/U[n_face][0]; // mass fraction of helium
+
+                double y=U[n_face][0]*1e7;
+
 
                 double rho5=g*U[n_face][0]*U[n_face][0]*1e14/(gam*PI*9e27)/1e5; // density in 10^5 g/cm^3
 
 
-                double T8=m_alpha/k_b * pow(PI *9e27,2)/(g*pow(U[n_face][0]*1e7,3))/1e8; // temperature in 10^8 K
+                //double T8=m_alpha/k_b * pow(PI *9e27,2)/(g*pow(U[n_face][0]*1e7,3))/1e8; // temperature in 10^8 K
+                double T8=m_alpha/k_b * gam*PI*9e27/(U[n_face][0]*1e7)/1e8; // temperature in 10^8 K
+
                 //std::cout<<T8<<"\n";
 
-                double Q=a*c*pow(T8*1e8,4)/(3*kappa0*y); //cgs units
-
-
-                double dQ_dt =Q*U[n_face][0]/9e27*3.3e-5; //back to code units * sigma
-                
-
+                double Q=a0*c*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
+                double dQ_dt =Q*U[n_face][0]*1e7*2.97e-33; //back to code units * sigma
                 E=dQ_dt;
-                //if(dt_new> std::abs(10* U[i][4]/dQ_dt))
-                 //   dt_new=std::abs(10* U[i][4]/dQ_dt);
+
+                // double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+                // double kappa = 3.4e6; // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
+                // E = GM/ kappa * (1 - betas[n_face]);
+
 
             }
             
@@ -441,7 +447,7 @@ public:
 
     std::vector<double> get_energy_changes(){
         
-    return {en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o,};
+    return {en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o,en_gain_burning_o};
     };
 
     void write_final_state()
@@ -545,7 +551,7 @@ protected:
         }
 
         if(nuclear_burning_on)
-            res[5]=u_in[0] * u_in[5] * ndv; //Sigma Y transfer
+            res[5]=u_in[5] * ndv; //Sigma Y transfer
 
         return res;
     }
@@ -702,30 +708,55 @@ protected:
 
         if(nuclear_burning_on && DIM==6){
 
+            
             double Q0=5.3e21;
-            double kappa0=3.4e6; //opacity 0.34 cm^2/g
-            double y=1e8; //col depth test
+            double kappa0=0.03; //opacity 0.34 cm^2/g
+            //double y=1e8; //col depth g/cm^2
             double m_alpha=6.65e-24; // mass of alpha particle in g
             double k_b=1.3807e-16; // Boltzmann constant in erg/K
             double c=3e10; // speed of light in cm/s
             double a=11e5; //radius in cm
             double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); 
-            double eps_alpha=5.84e17; // erg/cm^3
+            double eps_alpha=1.17e-5; // erg
+            double a0=7.56e-15; //erg/(cm^3 k^4)
+            double Y=u[5]/u[0]; // mass fraction of helium
+
+            double y=u[0]*1e7;
+
 
             double rho5=g*u[0]*u[0]*1e14/(gam*u[4]*9e27)/1e5; // density in 10^5 g/cm^3
 
 
-            double T8=m_alpha/k_b * pow(u[4]*9e27,2)/(g*pow(u[0]*1e7,3))/1e8; // temperature in 10^8 K
-            //std::cout<<T8<<"\n";
+            double T8=m_alpha/k_b * gam_0*u[4]*9e27/(u[0]*1e7)/1e8; // temperature in 10^8 K       
+            double Q=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8) - a0*c*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
 
-            double Q=Q0*rho5*rho5*pow(u[5],3)/pow(T8,3)*exp(-44.027/T8) - a*c*pow(T8*1e8,4)/(3*kappa0*y); //cgs units
+
+            res[4]+=Q*u[0]*1e7*2.97e-33; //back to code units * sigma
+
+            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+            double kappa = 3.4e6; // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
+
+            //std::cout<<Q0*rho5*rho5*pow(u[5],3)/pow(T8,3)*exp(-44.027/T8)*u[0]*1e7*2.97e-33<<"\n"
+
+            //             if(n_face==2111){
             
-            res[4]+=Q*u[0]/9e27*3.3e-5; //back to code units * sigma
+            // for(int i=0; i<DIM; i++)
+            //     std::cout<<u[i]<<" ";
+            // std::cout<<"\n";
 
+            // std::cout<<Q0*rho5*rho5*pow(u[5],3)/pow(T8,3)*exp(-44.027/T8)/(a0*c*pow(T8*1e8,4)/(3*kappa0*y*y))<<"\n";
+
+            //  }
             //res[5]+=Q*3*m_alpha/eps_alpha;
-            res[5]-=Q0*rho5*rho5*pow(u[5],3)/pow(T8,3)*exp(-44.027/T8)*3*m_alpha/eps_alpha*u[0];
 
+            res[5]-=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*1e7*2.97e-33*3*m_alpha/eps_alpha*9e20;
 
+            en_gain_burning_o+=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*1e7*2.97e-33*surface_area[n_face];
+
+            en_loss_rad=-a0*c*pow(T8*1e8,4)/(3*kappa0*y*y)*u[0]*1e7*2.97e-33*surface_area[n_face];
+            en_loss_rad_o+=en_loss_rad;
+
+            //res[5]-= GM / kappa * (1 - beta)*3*m_alpha/eps_alpha*u[0] * 1e19*1e19/(3.3e-5*3.3e-5);
         }
 
 
@@ -1110,30 +1141,36 @@ protected:
             if(nuclear_burning_on && DIM==6){
 
                 double Q0=5.3e21;
-                //double rho5=U[i][0]*100;
-                double kappa0=3.4e6; //opacity 0.34 cm^2/g
-                double y=1; //col depth test
+                double kappa0=0.03; //opacity 0.34 cm^2/g
                 double m_alpha=6.65e-24; // mass of alpha particle in g
                 double k_b=1.3807e-16; // Boltzmann constant in erg/K
                 double c=3e10; // speed of light in cm/s
                 double a=11e5; //radius in cm
-                double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); //
-                double eps_alpha=5.84e17; // erg/cm^3
+                double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); 
+                double eps_alpha=1.17e-5; // erg
+                double a0=7.56e-15; //erg/(cm^3 k^4)
+                double Y=U[i][5]/U[i][0]; // mass fraction of helium
 
+
+                //double y=1e8; //col depth g/cm^2
+                double y=U[i][0]*1e7;
 
                 double rho5=g*U[i][0]*U[i][0]*1e14/(gam*press*9e27)/1e5; // density in 10^5 g/cm^3
 
 
-                double T8=m_alpha/k_b * pow(press *9e27,2)/(g*pow(U[i][0]*1e7,3))/1e8; // temperature in 10^8 K
-                //std::cout<<T8<<"\n";
-
-                double Q=Q0*rho5*rho5*pow(U[i][5],3)/pow(T8,3)*exp(-44.027/T8) - a*c*pow(T8*1e8,4)/(3*kappa0*y); //cgs units
+                double T8=m_alpha/k_b * gam_0*press*9e27/(U[i][0]*1e7)/1e8; // temperature in 10^8 K       
+                double Q=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8) - a0*c*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
 
 
-                double dQ_dt =Q*U[i][0]/9e27*3.3e-5; //back to code units * sigma
+                double dQ_dt=Q*U[i][0]*1e7*2.97e-33; //back to code units * sigma
 
-                //if(dt_new> std::abs(10* U[i][4]/dQ_dt))
-                 //   dt_new=std::abs(10* U[i][4]/dQ_dt);
+                if (dt_new > std::abs(0.3 * U[i][4] / dQ_dt) )
+                    dt_new = 0.3 * std::abs(U[i][4] / dQ_dt);
+
+                double dY_dt=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*3*m_alpha/eps_alpha*U[i][0]*1e7*2.97e-33*9e20;
+                
+                if (dt_new > std::abs(0.3 * U[i][5] / dY_dt) )
+                    dt_new = 0.3 * std::abs(U[i][5] / dY_dt);
 
             }
             
@@ -1188,7 +1225,6 @@ protected:
 
             res -= B.norm()*B.norm()/(8*M_PI)*(gam_0 - 1);
         }
-
             return std::max(pressure_floor, res); // v4 = compressed star new gamma
         //}
     }

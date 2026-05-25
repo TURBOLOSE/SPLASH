@@ -80,12 +80,13 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
     elif(value=='T'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        data_rho.loc[:,:]=data_rho.loc[:,:].astype(float)
+        data_p.loc[:,:]=data_p.loc[:,:].astype(float)
         label_pr='T [K]'
-        a=11e5
         m_alpha=6.65e-24
         k_b=1.3807e-16
-        g=0.217909*1e18/(3.3e-5*3.3e-5*a*a)
-        data_rho.loc[:,1:]=m_alpha/k_b * (data_p.loc[:,1:]*9e27)**2 / ( g*(data_rho.loc[:,1:]*1e7)**3)
+        data_rho.loc[:,1:]=m_alpha/k_b * gam * (data_p.loc[:,1:]*9.0e27)/ ( (data_rho.loc[:,1:]*1.0e7))
+        data_rho.loc[:,:]=data_rho.loc[:,:].astype(float)
     elif(value=='entropy'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
@@ -223,7 +224,8 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
 
 
         #c_s_e=0.0529
-        c_s_e=3e-2
+        #c_s_e=3e-2
+        c_s_e=1
         xd_gr=np.array(xd_gr)/c_s_e
         yd_gr=np.array(yd_gr)/c_s_e
 
@@ -452,8 +454,8 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
 
                 #plt.streamplot(x, y, xd_gr_masked, yd_gr_masked)
                 ax[0].streamplot(X_gr,Y_gr,xd_gr_masked,yd_gr_masked,color=v[j],norm=norm2, cmap=colorm2, arrowsize=1, density = 1)
-                #fig.colorbar(mpl.cm.ScalarMappable(norm=norm2, cmap=colorm2),cax=ax[2], orientation='horizontal', label=r"v/c")
-                fig.colorbar(mpl.cm.ScalarMappable(norm=norm2, cmap=colorm2),cax=ax[2], orientation='horizontal', label=r"v/sqrt(gh)")
+                fig.colorbar(mpl.cm.ScalarMappable(norm=norm2, cmap=colorm2),cax=ax[2], orientation='horizontal', label=r"v/c")
+                #fig.colorbar(mpl.cm.ScalarMappable(norm=norm2, cmap=colorm2),cax=ax[2], orientation='horizontal', label=r"v/sqrt(gh)")
                 j += 1
 
 
@@ -464,8 +466,8 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
 
 
 
-projection_plots('rho', path="results/", min=None, max=None,skipstep=10,remove_avg_omega=False, print_residuals=False, 
-              log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, minv=0, maxv=1, normalized=False, projection='Mercator', tilt_angle=0)#0.0015)
+projection_plots('rho', path="results/", min=None, max=None,skipstep=5,remove_avg_omega=False, print_residuals=False, 
+              log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, minv=0, maxv=0.002, normalized=False, projection='Mercator', tilt_angle=0)#0.0015)
 
 
 # data_rho_c=pd.read_table("results/isoth_cycl9/"+'curl.dat', header=None, delimiter=r"\s+")
@@ -488,7 +490,7 @@ def integrated_plot(value):
 
     if(value=='rho'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
-        label_pr=r'm, $10^7 \rm g $ '
+        label_pr=r'\Sigma, $10^7 \rm g/cm^2 $ '
     elif(value=='p'):
         data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
         label_pr='Pressure'
@@ -560,19 +562,20 @@ def integrated_plot(value):
     t=np.array(data_rho.loc[:,0])
 
     for step in range(maxstep):
+        #plot_data.append(np.sum(np.array(data_rho.loc[step,1:])*surface_areas)*1e12)
         plot_data.append(np.mean(np.array(data_rho.loc[step,1:])))
 
     plot_data=np.array(plot_data)
 
     plt.plot(t*3.3e-5,plot_data)
     plt.xlabel("t,s")
-    plt.ylabel("total "+label_pr)
+    plt.ylabel("Total "+label_pr)
     plt.savefig('plots/integ_plt.png', bbox_inches='tight',dpi=300)
     plt.clf()
     plt.close()
 
 
-#integrated_plot('Y')
+#integrated_plot('rho')
 
 
 

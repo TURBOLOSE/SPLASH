@@ -2198,25 +2198,37 @@ def make_input_6_polar_dense_spot():
     gam0=5./3
     gam=2-1/gam0
     Omega0  = 0.1     # frame rotation
-    a_target  = 2/300   
-    theta_c = 20 * np.pi / 180    
+    #Omega0=0
 
 
     delta_theta=np.pi/4
+    a=11e5
+    m_alpha=6.65e-24
+    k_b=1.3807e-16
+    g=0.217909*1e18/(3.3e-5*3.3e-5*a*a)
 
-    rho0=1
+
+    T_in=2*1e8#K #physical params (weak cooling?)
+    rho_in=2*1e6 #g/cm^3
+
+    a=m_alpha/k_b
+    b=g/gam
+
+
+
+    rho0=T_in*rho_in/(a*b) /1e7 
+    p0=T_in**2*rho_in/(a**2 *b) /9e27
+
+    p=np.ones(N)*p0
     rho=np.ones(N)*rho0
-    p0=a_target**2*rho0/gam
-    p=np.zeros(N)
     l   = np.zeros((N, 3))  
     v   = np.zeros((N, 3))  
-    # Colatitude of each cell
 
     theta = np.arccos(np.clip(face_centers[:, 2], -1, 1))
     #theta = np.arctan2(face_centers[:, 1], face_centers[:, 2])
 
 
-    p_fluc=0.5
+    p_fluc=0.75
 
     
 
@@ -2224,12 +2236,8 @@ def make_input_6_polar_dense_spot():
         th = theta[i]
 
         # Density profile (applied everywhere for smooth field)
-        p[i] = p0*(1.0 + p_fluc * np.tanh(3 - 8 * th))
-
-        #if th < theta_c:
-        # Geostrophic velocity:
-        # v_phi = (a^2 / (2*Omega0*cos(theta)*rho)) * d(rho)/d(theta)
-        # d(rho)/d(theta) = -0.8 / cosh^2(3-8*theta)
+        #p[i] = p0*(1.0 + p_fluc * np.tanh(3 - 8 * th))
+        p[i] = p0*(1.0 + p_fluc * np.tanh(2 - 2 * th))
 
         f = 2.0 * Omega0 * np.cos(th)   
 
@@ -2237,9 +2245,10 @@ def make_input_6_polar_dense_spot():
         if abs(f) < 1e-10:
             continue
 
-        dp_dth = -8 * p_fluc / np.cosh(3 - 8 * th)**2
+        #dp_dth = -8 * p_fluc / np.cosh(3 - 8 * th)**2
+        dp_dth = -2 * p_fluc / np.cosh(2 - 2 * th)**2
 
-        v_phi_magnitude = (a_target**2 / (f * rho[i])) * dp_dth
+        v_phi_magnitude = (gam*p0/rho0 / (f * rho[i])) * dp_dth
         # v_phi < 0 => clockwise => anticyclonic (correct for dense spot)
 
         # Zonal unit vector e_phi = (-sin(phi), cos(phi), 0)
@@ -2255,21 +2264,23 @@ def make_input_6_polar_dense_spot():
 
     # Diagnostics
     v_max = np.max(np.linalg.norm(-np.cross(face_centers,l) / rho[:, None], axis=1))
-    Ma    = v_max / a_target
+    Ma    = v_max / np.sqrt(gam*p0/rho0)
     f_pole = 2 * Omega0
-    L_R   = a_target / f_pole
+    L_R   = np.sqrt(gam*p0/rho0) / f_pole
 
     E = 1/(gam-1)*p + rho*np.linalg.norm(v, axis=1)*np.linalg.norm(v, axis=1)/2
 
-    print(f'Max |v|      = {v_max:.5f}')
-    print(f'Max Mach     = {Ma:.4f}')
-    print(f'L_R (pole)   = {L_R:.4f}')
-    print(f'theta_c/L_R  = {theta_c/L_R:.2f}  (should be > 2 for coherent drift)')
-    print(f'p max/min  = {np.max(p):.4f} / {np.min(p):.4f}')
-    print(f'delta_p    = {(np.max(p)-1)*100:.2f}%')
+    g0=0.217909
+
+    T=m_alpha/k_b * gam* (p*9e27) / ( (rho*1e7))
+    print('mean log10 T:', np.mean(np.log10(T)), ' K')
+    print('mean rho:', np.mean(g*rho**2*1e14/(gam*p*9e27)), ' g/cm^3')
+    print('mean h: ', np.mean(gam*p/(rho*g0))*11, 'km')
+    print('mean c_s: ', np.mean(gam*p/rho), 'c')
+    print()
 
     pd.DataFrame(
-        np.column_stack([rho, l[:, 0], l[:, 1], l[:, 2], E, np.ones(len(face_centers))])
+        np.column_stack([rho, l[:, 0], l[:, 1], l[:, 2], E, rho])
     ).to_csv('input/input.dat', index=False, sep=' ', header=False)
 
 
@@ -2293,14 +2304,40 @@ def make_input_6_cos_bell():
     phi=np.arctan2(face_centers[:,1],face_centers[:,0]) #long
 
 
-    omega=np.array([0,0,0])
+    omega=np.array([0,0,0.1])
+    a=11e5
+    m_alpha=6.65e-24
+    k_b=1.3807e-16
+    g=0.217909*1e18/(3.3e-5*3.3e-5*a*a)
+    g0=0.217909
 
-    rho0=1
+    # T_in=5*1e8#K #sorta working params v1
+    # rho_in=10*1e7 #g/cm^3
+
+
+    T_in=1.5*1e8#K #physical params (weak cooling?)
+    rho_in=1e6 #g/cm^3
+
+    # T_in=100*1e8#K #physical params
+    # rho_in=1e6 #g/cm^3
+
+
+    a=m_alpha/k_b
+    b=g/gam
+
+    rho0=T_in*rho_in/(a*b) /1e7 
+    p0=T_in**2*rho_in/(a**2 *b) /9e27
+
+    print(rho0)
+    print(p0)
+
+
+
+
+    #rho0=1
     rho=np.ones(N)*rho0
-    #a_target=2/300
-    #a_target=1/50
-    a_target=1/30
-    p0=a_target**2*rho0/gam
+
+    #p0=a_target**2*rho0/gam
     p=np.ones(N)*p0
     v=[]
     a=1
@@ -2309,16 +2346,19 @@ def make_input_6_cos_bell():
     theta_c=np.pi/4
     phi_c=np.pi/4
 
-    delta_rho=1
+    delta_rho=0.5
+
+    entr_0=p0/rho0**gam
 
     r=a*np.arccos(np.sin(theta_c)*np.sin(theta)+np.cos(theta)*np.cos(theta_c)*np.cos(phi-phi_c))
 
     for face_num, R in enumerate(face_centers):
         
         
-        if r[face_num]<2*R0:
+        if r[face_num]<3*R0:
             #rho[face_num]+=delta_rho*np.cos(np.pi*r[face_num]/R0)
             rho[face_num]=rho0*(1.0 + delta_rho  * np.exp(-(r[face_num]/(np.sqrt(2)*R0))**2 ))
+            #p[face_num]=entr_0*rho[face_num]**gam
 
 
         l.append(rho[face_num]*np.cross(R,np.cross(omega,R))/(np.linalg.norm(R)**2))
@@ -2328,20 +2368,124 @@ def make_input_6_cos_bell():
     l=np.array(l)
     v=np.array(v)
 
-    a=11e5
-    m_alpha=6.65e-24
-    k_b=1.3807e-16
-    g=0.217909*1e18/(3.3e-5*3.3e-5*a*a)
-    T=m_alpha/k_b * (p*9e27)**2 / ( g*(rho*1e7)**3)
+
+    T=m_alpha/k_b * gam* (p*9e27) / ( (rho*1e7))
     print('mean log10 T:', np.mean(np.log10(T)), ' K')
     print('mean rho:', np.mean(g*rho**2*1e14/(gam*p*9e27)), ' g/cm^3')
+    print('mean h: ', np.mean(gam*p/(rho*g0))*11, 'km')
+    print('mean c_s: ', np.mean(gam*p/rho), 'c')
 
 
     theta=np.arccos(face_centers[:,2])
 
     E=1/(gam-1)*p+rho*np.linalg.norm(v, axis=1)*np.linalg.norm(v, axis=1)/2
 
-    pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E, np.ones(len(face_centers))]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
+    pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E, rho]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
+
+
+def make_input_5N_cos_bell(): 
+
+    gam0=5/3
+    gam=2-1/gam0
+
+
+    face_centers=pd.read_table('results/face_centers.dat', header=None, delimiter=r"\s+")
+    N=len(face_centers[0])
+
+    face_centers=np.array(face_centers)/np.linalg.norm(np.array(face_centers), axis=1, keepdims=True)
+
+
+    l=[]
+    
+    theta=-np.arccos(face_centers[:,2])+np.pi/2 #lat
+    phi=np.arctan2(face_centers[:,1],face_centers[:,0]) #long
+
+
+    omega=np.array([0,0,0])
+    a=11e5
+    m_alpha=6.65e-24
+    k_b=1.3807e-16
+    g=0.217909*1e18/(3.3e-5*3.3e-5*a*a)
+    g0=0.217909
+
+    # T_in=5*1e8#K #sorta working params v1
+    # rho_in=10*1e7 #g/cm^3
+
+
+    T_in=3*1e8#K #physical params (weak cooling?)
+    rho_in=1e6 #g/cm^3
+
+    # T_in=100*1e8#K #physical params
+    # rho_in=1e6 #g/cm^3
+
+
+    a=m_alpha/k_b
+    b=g/gam
+
+    rho0=T_in*rho_in/(a*b) /1e7 
+    p0=T_in**2*rho_in/(a**2 *b) /9e27
+
+    print(rho0)
+    print(p0)
+
+
+
+
+    #rho0=1
+    rho=np.ones(N)*rho0
+    #a_target=2/300
+    #a_target=1/50
+    #a_target=1/30
+    #a_target=1/12
+    #a_target=1/400
+    #a_target=1/200
+    #a_target=1/50
+
+    #p0=a_target**2*rho0/gam
+    p=np.ones(N)*p0
+    v=[]
+    a=1
+    R0=a/3
+
+    theta_c=np.pi/4
+    phi_c=np.pi/4
+
+    delta_rho=0.1
+
+    entr_0=p0/rho0**gam
+
+    r=a*np.arccos(np.sin(theta_c)*np.sin(theta)+np.cos(theta)*np.cos(theta_c)*np.cos(phi-phi_c))
+
+    for face_num, R in enumerate(face_centers):
+        
+        
+        if r[face_num]<3*R0:
+            #rho[face_num]+=delta_rho*np.cos(np.pi*r[face_num]/R0)
+            rho[face_num]=rho0*(1.0 + delta_rho  * np.exp(-(r[face_num]/(np.sqrt(2)*R0))**2 ))
+            p[face_num]=entr_0*rho[face_num]**gam
+
+
+        l.append(rho[face_num]*np.cross(R,np.cross(omega,R))/(np.linalg.norm(R)**2))
+        v.append(np.cross(omega,R/np.linalg.norm(R)))
+    
+
+    l=np.array(l)
+    v=np.array(v)
+
+
+    T=m_alpha/k_b * gam* (p*9e27) / ( (rho*1e7))
+    print((p*9e27)**2)
+    print('mean log10 T:', np.mean(np.log10(T)), ' K')
+    print('mean rho:', np.mean(g*rho**2*1e14/(gam*p*9e27)), ' g/cm^3')
+    print('mean h: ', np.mean(gam*p/(rho*g0))*11, 'km')
+    print('base c_s: ', np.mean(np.sqrt(gam*p0/rho0)), 'c')
+    print('mean c_s: ', np.mean(np.sqrt(gam*p/rho)), 'c')
+
+
+    theta=np.arccos(face_centers[:,2])
+
+    pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2], rho]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
+
 
 
 #make_input_5_new_p()
@@ -2364,8 +2508,10 @@ def make_input_6_cos_bell():
 #make_input_4_polar_dense_spot()
 #make_input_5_polar_dense_spot()
 
-#make_input_6_polar_dense_spot()
-make_input_6_cos_bell()
+
+make_input_6_polar_dense_spot()
+#make_input_6_cos_bell()
+#make_input_5N_cos_bell()
 
 #make_input_4_cyclone(omega_cyclone=-0.05)
 

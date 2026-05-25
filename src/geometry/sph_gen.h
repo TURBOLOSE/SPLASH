@@ -264,6 +264,76 @@ SurfaceMesh uv_sphere(int n_slices, int n_stacks)
     return mesh;
 }
 
+
+
+SurfaceMesh uv_sphere_2(int n_slices, int n_stacks)
+{
+    SurfaceMesh mesh;
+
+    // Goal: identical connectivity and winding as uv_sphere(), but with pole axis
+    // rotated from Y to Z (swap y<->z in the uv_sphere() vertex formula).
+    // MUSCL_geometry assumes a consistent winding to get outward normals and
+    // positive spherical areas.
+
+    // add top vertex (north pole, +Z). This is the rotated version of (0, +Y, 0).
+    auto v0 = mesh.add_vertex(Point(0, 0, 1));
+
+    // generate vertices per stack / slice
+    // Use *exactly* the same (phi, theta) loops and ordering as uv_sphere().
+    // Start with uv_sphere() coordinates:
+    //   x = sin(phi) * cos(theta)
+    //   y = cos(phi)
+    //   z = sin(phi) * sin(theta)
+    // Then rotate by swapping y<->z:
+    //   (x, y, z)_new = (x, z, y)
+    for (int i = 0; i < n_stacks - 1; i++)
+    {
+        const auto phi = M_PI * double(i + 1) / double(n_stacks);
+        for (int j = 0; j < n_slices; j++)
+        {
+            const auto theta = 2.0 * M_PI * double(j) / double(n_slices);
+            const auto x = std::sin(phi) * std::cos(theta);
+            const auto y = std::sin(phi) * std::sin(theta);
+            const auto z = std::cos(phi);
+            mesh.add_vertex(Point(x, y, z));
+        }
+    }
+
+    // add bottom vertex (south pole, -Z). Rotated version of (0, -Y, 0).
+    auto v1 = mesh.add_vertex(Point(0, 0, -1));
+
+    // add top / bottom triangles (identical indexing and winding as uv_sphere)
+    for (int i = 0; i < n_slices; ++i)
+    {
+        auto i0 = i + 1;
+        auto i1 = (i + 1) % n_slices + 1;
+    // reverse winding vs uv_sphere(): rotation changes handedness (det=-1)
+    mesh.add_triangle(v0, Vertex(i0), Vertex(i1));
+        i0 = i + n_slices * (n_stacks - 2) + 1;
+        i1 = (i + 1) % n_slices + n_slices * (n_stacks - 2) + 1;
+    mesh.add_triangle(v1, Vertex(i1), Vertex(i0));
+    }
+
+    // add quads per stack / slice
+    for (int j = 0; j < n_stacks - 2; j++)
+    {
+        auto j0 = j * n_slices + 1;
+        auto j1 = (j + 1) * n_slices + 1;
+        for (int i = 0; i < n_slices; i++)
+        {
+            auto i0 = j0 + i;
+            auto i1 = j0 + (i + 1) % n_slices;
+            auto i2 = j1 + (i + 1) % n_slices;
+            auto i3 = j1 + i;
+            // reverse winding
+            mesh.add_quad(Vertex(i0), Vertex(i3), Vertex(i2), Vertex(i1));
+        }
+    }
+
+    return mesh;
+}
+
+
 SurfaceMesh icosphere(size_t n_subdivisions)
 {
     auto mesh = icosahedron();

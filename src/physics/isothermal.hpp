@@ -7,7 +7,7 @@ class isothermal : public MUSCL_base
 {
 
 private:
-    std::ofstream outfile, outfile_curl, outfile_p, outfile_omega, outfile_l[3], outfile_mach;
+    std::ofstream outfile, outfile_curl, outfile_p, outfile_omega, outfile_l[3], outfile_mach, outfile_Y;
 
 public:
     isothermal(SurfaceMesh mesh, std::vector<StateVec> U_in, double gam, size_t threads)
@@ -15,7 +15,7 @@ public:
     {
 
         set_analytical_solution();
-        if (DIM != 4)
+        if(DIM>4 && !(DIM==5 && nuclear_burning_on))
         {
             std::cout << "check DIM \n";
             stop_check = true;
@@ -46,6 +46,13 @@ public:
             outfile_l[i].open(adrs[i], std::ios::out | std::ios::app);
         }
 
+        if (nuclear_burning_on)
+        {
+            outfile_Y.open("results/Y.dat", std::ios::out | std::ios::trunc);
+            outfile_Y.close();
+            outfile_Y.open("results/Y.dat", std::ios::out | std::ios::app);
+        }
+
     }
 
     void print_rho()
@@ -65,6 +72,21 @@ public:
             outfile << U_i[0] << " ";
         }
         outfile << "\n";
+    };
+
+    void write_t_Y()
+    {
+        if (!nuclear_burning_on)
+            return;
+
+        outfile_Y << this->time() << "  ";
+        size_t nf = this->n_faces();
+        for (size_t n_face = 0; n_face < nf; n_face++)
+        {
+            // isothermal burning state: U = {rho, l1, l2, l3, rhoY}
+            outfile_Y << U[n_face][4] / U[n_face][0] << " ";
+        }
+        outfile_Y << "\n";
     };
 
         void write_t_mach()
@@ -176,6 +198,103 @@ public:
         outfile_omega << "\n";
     };
 
+    std::vector<double> get_light_curves()
+    {
+        // rotation around z axis is implied
+        std::vector<double> result;
+
+        vector3d<double> obs_vector_0, obs_vector_45, obs_vector_90, obs_vector_180, l_vec, vel;
+        obs_vector_0[0] = 9.4 * 3 * 1e19 / 15000;
+        obs_vector_0[1] = 0;
+        obs_vector_0[2] = 0; // dist = 9400pc (in R_ns)
+        obs_vector_45[0] = std::sqrt(9.4 * 3 * 1e19 / 15000);
+        obs_vector_45[1] = 0;
+        obs_vector_45[2] = std::sqrt(9.4 * 3 * 1e19 / 15000); // dist = 9400pc (in R_ns)
+        obs_vector_90[0] = 0;
+        obs_vector_90[1] = 0;
+        obs_vector_90[2] = 9.4 * 3 * 1e19 / 15000; // dist = 9400pc (in R_ns)
+        obs_vector_180[0] = 0;
+        obs_vector_180[1] = 0;
+        obs_vector_180[2] = -9.4 * 3 * 1e19 / 15000; // dist = 9400pc (in R_ns)
+
+        double flux_tot_0 = 0, flux_tot_45 = 0, flux_tot_90 = 0, flux_tot_180 = 0;
+        double phi_fc, theta_fc, d_vec, cos_alpha;
+        size_t nf = this->n_faces();
+
+        for (size_t n_face = 0; n_face < nf; n_face++)
+        {
+            phi_fc = std::atan2(face_centers[n_face][1] / face_centers[n_face].norm(),
+                                face_centers[n_face][0] / face_centers[n_face].norm());
+            theta_fc = std::acos(face_centers[n_face][2] / face_centers[n_face].norm());
+
+            l_vec[0] = U[n_face][1];
+            l_vec[1] = U[n_face][2];
+            l_vec[2] = U[n_face][3];
+
+            vel = cross_product(face_centers[n_face] / face_centers[n_face].norm(), l_vec);
+            vel /= (-U[n_face][0]);
+
+            // isothermal pressure
+            const double PI = a * a * U[n_face][0];
+            double E = PI;
+
+            if (nuclear_burning_on && DIM == 5)
+            {
+                const double kappa0 = 0.03;
+                const double m_alpha = 6.65e-24;
+                const double k_b = 1.3807e-16;
+                const double c_cgs = 3e10;
+                const double a_ns = 11e5;
+                const double g_cgs = 0.217909 * 1e18 / (3.3e-5 * 3.3e-5 * a_ns * a_ns);
+                const double a0 = 7.56e-15;
+
+                const double Y = U[n_face][4] / U[n_face][0];
+                const double y = U[n_face][0] * 1e7;
+
+                const double rho5 = g_cgs * U[n_face][0] * U[n_face][0] * 1e14 / (gam * PI * 9e27) / 1e5;
+                const double T8 = m_alpha / k_b * gam * PI * 9e27 / (U[n_face][0] * 1e7) / 1e8;
+
+                const double Q = a0 * c_cgs * std::pow(T8 * 1e8, 4) / (3 * kappa0 * y * y);
+                const double dQ_dt = Q * U[n_face][0] * 1e7 * 2.97e-33;
+                E = dQ_dt;
+            }
+
+            if (phi_fc < M_PI / 2 && phi_fc > -M_PI / 2)
+            {
+                d_vec = dot_product(obs_vector_0, face_centers[n_face] / face_centers[n_face].norm());
+                cos_alpha = std::abs(d_vec) / obs_vector_0.norm();
+                flux_tot_0 += E * cos_alpha * surface_area[n_face];
+            }
+
+            if (theta_fc < M_PI / 2)
+            {
+                d_vec = dot_product(obs_vector_90, face_centers[n_face] / face_centers[n_face].norm());
+                cos_alpha = std::abs(d_vec) / obs_vector_90.norm();
+                flux_tot_90 += E * cos_alpha * surface_area[n_face];
+            }
+
+            if (dot_product(obs_vector_45, face_centers[n_face] / face_centers[n_face].norm()) > 0)
+            {
+                d_vec = dot_product(obs_vector_45, face_centers[n_face] / face_centers[n_face].norm());
+                cos_alpha = std::abs(d_vec) / obs_vector_45.norm();
+                flux_tot_45 += E * cos_alpha * surface_area[n_face];
+            }
+
+            if (theta_fc > M_PI / 2)
+            {
+                d_vec = dot_product(obs_vector_180, face_centers[n_face] / face_centers[n_face].norm());
+                cos_alpha = std::abs(d_vec) / obs_vector_180.norm();
+                flux_tot_180 += E * cos_alpha * surface_area[n_face];
+            }
+        }
+
+        result.push_back(flux_tot_0);
+        result.push_back(flux_tot_45);
+        result.push_back(flux_tot_90);
+        result.push_back(flux_tot_180);
+        return result;
+    };
+
 
 
 public:
@@ -199,6 +318,7 @@ public:
 
 
         PI = a * a * u_in[0];
+
 
         R_vec = face_centers[n_face];
         R = R_vec.norm();
@@ -233,6 +353,9 @@ public:
         res[1] = u_in[1] * ndv - nxR[0] * PI;
         res[2] = u_in[2] * ndv - nxR[1] * PI;
         res[3] = u_in[3] * ndv - nxR[2] * PI;
+
+    if (nuclear_burning_on)
+        res[4] = u_in[4] * ndv; // rhoY transfer
 
         return res;
     }
@@ -336,12 +459,48 @@ public:
                         // double t_stop=30;
 
 
-            double t_med=60;
-            double d_disp=30;
-            double adj_cf=1;
-            if(r<R0 && t<= t_med+2*d_disp){  //t<=150){
-                res[0]+= adj_cf* masspwr * std::exp(-r*r/(2*R0*R0))*std::exp(-std::pow(t-t_med,2)/(2*d_disp*d_disp));
-                }
+            // double t_med=60;
+            // double d_disp=30;
+            // double adj_cf=1;
+            // if(r<R0 && t<= t_med+2*d_disp){  //t<=150){
+            //     res[0]+= adj_cf* masspwr * std::exp(-r*r/(2*R0*R0))*std::exp(-std::pow(t-t_med,2)/(2*d_disp*d_disp));
+            //     }
+        }
+
+        // Nuclear burning (ported from adiabatic.hpp).
+        // isothermal state with burning: u = {rho, l1, l2, l3, rhoY}
+        // source returns res[4] = d(rhoY)/dt.
+        if (nuclear_burning_on && DIM == 5)
+        {
+            // NOTE: In isothermal, pressure is Pi = a^2 * rho.
+            const double PI_local = a * a * u[0];
+
+            const double Q0 = 5.3e21;
+            const double kappa0 = 0.03; // opacity in cgs
+            const double m_alpha = 6.65e-24; // g
+            const double k_b = 1.3807e-16; // erg/K
+            const double c_cgs = 3e10; // cm/s
+            const double a_ns = 11e5; // cm
+            const double g_cgs = 0.217909 * 1e18 / (3.3e-5 * 3.3e-5 * a_ns * a_ns);
+            const double eps_alpha = 1.17e-5; // erg
+            const double a0 = 7.56e-15; // erg/(cm^3 K^4)
+
+            const double Y = u[4] / u[0];
+            const double y = u[0] * 1e7; // column depth proxy
+
+            const double rho5 = g_cgs * u[0] * u[0] * 1e14 / (gam * PI_local * 9e27) / 1e5; // in 1e5 g/cm^3
+            const double T8 = m_alpha / k_b * gam * PI_local * 9e27 / (u[0] * 1e7) / 1e8; // in 1e8 K
+
+
+            const double Q = Q0 * rho5 * rho5 * std::pow(Y, 3) / std::pow(T8, 3) * std::exp(-44.027 / T8)
+                            - a0 * c_cgs * std::pow(T8 * 1e8, 4) / (3 * kappa0 * y * y);
+
+          
+            res[0]+= gam*(gam-1)*Q*1e7*2.97e-33;
+
+
+            res[4] -= Q0 * rho5 * rho5 * std::pow(Y, 3) / std::pow(T8, 3) * std::exp(-44.027 / T8)
+                      * u[0] * 1e7 * 2.97e-33 * 3 * m_alpha / eps_alpha * 9e20;
         }
 
 

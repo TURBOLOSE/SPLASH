@@ -5,9 +5,9 @@
     "magnetic_field_on":false,
     "dim": 5,
     "CFL": 0.3,
-    "dt": 1,
+    "dt": 5,
     "maxstep":100000,
-    "t_max":4000,
+    "t_max":6000,
     "skipstep": 100,
     "gam3d":1.6666666666666666666666666666666,
     "omega_ns":0.1,
@@ -28,5 +28,5 @@
     "implicit_solve_on":false,
     "nuclear_burning_on":true,
     "implicit_iternum":3,
-    "a_isothermal":3e-2
+    "a_isothermal":0.003
 }

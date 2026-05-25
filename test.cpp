@@ -14,7 +14,8 @@ int main()
     //SurfaceMesh mesh = uv_sphere(128,65);
     //SurfaceMesh mesh = quad_sphere(6);
     //SurfaceMesh mesh = icosphere(5);
-    SurfaceMesh mesh = icosphere_hex(5);
+    //SurfaceMesh mesh = icosphere_hex(5);
+    SurfaceMesh mesh = uv_sphere_2(128,65);
 
     // MUSCL_base_geometry test(mesh);
 
@@ -141,10 +142,9 @@ int main()
 
     // out_deltaE<< "t, en_gain_acc, en_loss_fall, en_loss_fric, en_loss_rad \n";
 
-    // en_changes=test2.get_energy_changes();
-    // out_deltaE<<test2.time() << " "<<en_changes[0]<< " "<<en_changes[1]
-    // << " "<<en_changes[2]<< " "<<en_changes[3]<<"\n";
-    // out_deltaE.flush();
+        // en_changes=test2.get_energy_changes();
+        // out_deltaE<<test2.time() << " "<<en_changes[3]<< " "<<en_changes[4]<<"\n";
+        // out_deltaE.flush();
     
 
 
@@ -165,8 +165,7 @@ int main()
 
 
         // en_changes=test2.get_energy_changes();
-        // out_deltaE<<test2.time() << " "<<en_changes[0]<< " "<<en_changes[1]
-        // << " "<<en_changes[2]<< " "<<en_changes[3]<<"\n";
+        // out_deltaE<<test2.time() << " "<<en_changes[3]<< " "<<en_changes[4]<<"\n";
         // out_deltaE.flush();
 
 

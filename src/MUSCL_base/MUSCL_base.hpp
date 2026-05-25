@@ -95,7 +95,7 @@ public:
             exit(1);
         }
 
-        if(nuclear_burning_on && DIM!=6){
+        if(nuclear_burning_on && !(DIM==6||DIM==5)){
             std::cout<<"nuclear burning on but DIM is not 6, check MUSCL_base.hpp \n";
             stop_check=true;
             exit(1);
@@ -567,7 +567,7 @@ private:
 
                 c_s=std::max(std::sqrt(gam_0 * p / rho), std::sqrt(B_mag * B_mag / (4*M_PI*rho*H)));
 
-            }else if(DIM==4){
+            }else if(DIM==4 || (DIM==5 && nuclear_burning_on)){
                 c_s=a;
 
             }else
@@ -626,7 +626,7 @@ private:
 
             U[i][0] -= rho_an[i];
 
-            if(DIM!=4){
+            if(DIM>4 && !(DIM==5 && nuclear_burning_on)){
                 U[i][4] = pressure_fc(U[i], i);
                 U[i][4] -= p_an[i];
             }
@@ -668,7 +668,7 @@ private:
                     {
                         U_plus[i][j][k] = U[i][k] + rho_an[i] + pp[k] * lim[k] * BM_dist[i][j];
                     }
-                    else if (k == 4)
+                    else if (k == 4 && !(DIM==5 && nuclear_burning_on))
                     {
                         U_plus[i][j][k] = U[i][k] + p_an[i] + pp[k] * lim[k] * BM_dist[i][j];
 
@@ -767,7 +767,7 @@ private:
     double pressure_fc(StateVec &u, int n_face) // u[4] == energy
     {                   
         
-        if(DIM==4){
+        if(DIM==4 || (DIM==5 && nuclear_burning_on)){
 
             return u[0]*a*a;
         }        
