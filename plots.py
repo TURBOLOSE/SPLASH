@@ -49,6 +49,9 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
     elif(value=='p'):
         data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
         label_pr='Pressure'
+    elif(value=='h_sw'):
+        data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
+        label_pr='Height'
     elif(value=='omega'):
         data_rho=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+")
         label_pr='Omega_z'
@@ -87,6 +90,13 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
         k_b=1.3807e-16
         data_rho.loc[:,1:]=m_alpha/k_b * gam * (data_p.loc[:,1:]*9.0e27)/ ( (data_rho.loc[:,1:]*1.0e7))
         data_rho.loc[:,:]=data_rho.loc[:,:].astype(float)
+    elif(value=='T_sw'):
+        data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
+        label_pr='T [K]'
+        m_alpha=6.65e-24
+        k_b=1.3807e-16
+        GM=0.23
+        data_rho.loc[:,1:]=m_alpha/k_b * gam * GM * data_rho.loc[:,1:] * 9e20 /1e2
     elif(value=='entropy'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
@@ -104,9 +114,12 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
             B=np.array([data_Bx.loc[i,1:],data_By.loc[i,1:],data_Bz.loc[i,1:]]).T 
             rho0=data_rho.loc[i,1:]
             data_rho.loc[i,1:]=np.sqrt(B[:,0]*B[:,0]+B[:,1]*B[:,1]+B[:,2]*B[:,2])
-    elif(value=='vel_abs'):
+    elif(value=='vel_abs' or value=='vel_abs_sw'):
         label_pr='Speed'
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        if(value=='vel_abs_sw'):
+            data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
+        else:
+            data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
         data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
         data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
@@ -466,7 +479,7 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
 
 
 
-projection_plots('rho', path="results/", min=None, max=None,skipstep=5,remove_avg_omega=False, print_residuals=False, 
+projection_plots('T_sw', path="results/", min=None, max=None,skipstep=1,remove_avg_omega=False, print_residuals=False, 
               log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, minv=0, maxv=0.002, normalized=False, projection='Mercator', tilt_angle=0)#0.0015)
 
 
@@ -491,6 +504,9 @@ def integrated_plot(value):
     if(value=='rho'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         label_pr=r'\Sigma, $10^7 \rm g/cm^2 $ '
+    elif(value=='h_sw'):
+        data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
+        label_pr=r'h'
     elif(value=='p'):
         data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
         label_pr='Pressure'
@@ -575,8 +591,7 @@ def integrated_plot(value):
     plt.close()
 
 
-#integrated_plot('rho')
-
+#integrated_plot('h_sw')
 
 
 
@@ -827,6 +842,9 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
     if(value=='rho'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         label_pr=r'$\Sigma$, $10^7 \rm g \ \rm cm^{-2}$ '
+    if(value=='h_sw'):
+        data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
+        label_pr=r'$h$ '
     elif(value=='p'):
         data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
         label_pr='Pressure'
@@ -853,14 +871,14 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
     elif(value=='entropy'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
-        data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
+        #data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
         label_pr='Entropy'
-        data_rho.loc[:,1:]=data_p.loc[:,1:]/(data_rho.loc[:,1:]**  ( (10-3*data_beta.loc[:,1:])/(8-3*data_beta.loc[:,1:]) )   )
+        data_rho.loc[:,1:]=data_p.loc[:,1:]/(data_rho.loc[:,1:]** 1.25)  #( (10-3*data_beta.loc[:,1:])/(8-3*data_beta.loc[:,1:]) )   )
 
     elif(value=='vel_abs'):
         print("speed")
         label_pr='Speed'
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
         data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
         data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
         data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
@@ -894,14 +912,13 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
             plt.ylabel(label_pr)
             plt.title('t='+"{:.4f}".format(data_rho.loc[i,0]*3.3e-5)+' s')
             plt.ylim([ylim_min, ylim_max])
-            plt.savefig('plots/vel_vs_theta_'+"{0:0>4}".format(i)+'.png', bbox_inches='tight',dpi=200)
+            plt.savefig('plots/rho_vs_theta_'+"{0:0>4}".format(i)+'.png', bbox_inches='tight',dpi=200)
             plt.clf()
             plt.close()
 
 
 
-#plot_vs_theta('vel_abs',path='results/', skipstep=10, ylim_min=0, ylim_max=3e-4)
-
-#plot_vs_theta('vel_abs',path='results/', skipstep=10, ylim_min=0, ylim_max=3e-2)
+#plot_vs_theta('h_sw',path='results/', skipstep=5, ylim_min=0, ylim_max=0)
+#plot_vs_theta('vel_abs',path='results/', skipstep=5, ylim_min=0, ylim_max=1)
 
 

@@ -1,6 +1,7 @@
 #include <iostream>
 #include "src/Riemann_solvers/HLLE.hpp"
 #include "src/Riemann_solvers/HLLE_p.hpp"
+#include "src/Riemann_solvers/HLLE_sw.hpp"
 #include "src/Riemann_solvers/HLLC.hpp"
 #include "src/Riemann_solvers/HLLD.hpp"
 #include "src/Riemann_solvers/HLLCplus.hpp"
@@ -14,8 +15,8 @@ int main()
     //SurfaceMesh mesh = uv_sphere(128,65);
     //SurfaceMesh mesh = quad_sphere(6);
     //SurfaceMesh mesh = icosphere(5);
-    //SurfaceMesh mesh = icosphere_hex(5);
-    SurfaceMesh mesh = uv_sphere_2(128,65);
+    SurfaceMesh mesh = icosphere_hex(5);
+    //SurfaceMesh mesh = uv_sphere_2(128,65);
 
     // MUSCL_base_geometry test(mesh);
 
@@ -96,8 +97,9 @@ int main()
     }
 
     //MUSCL_HLLE test2(mesh, U_in, gam, threads);
+    MUSCL_HLLE_sw test2(mesh, U_in, gam, threads);
     //MUSCL_HLLE_p test2(mesh, U_in, gam,omega_ns, threads);
-    MUSCL_HLLC test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
+    //MUSCL_HLLC test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
     //MUSCL_HLLCplus test2(mesh, U_in, gam, omega_ns, accretion_on, threads);
     //MUSCL_HLLD test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
 

@@ -6,9 +6,9 @@
     "dim": 5,
     "CFL": 0.3,
     "dt": 5,
-    "maxstep":100000,
-    "t_max":6000,
-    "skipstep": 100,
+    "maxstep":1000000,
+    "t_max":100,
+    "skipstep": 50,
     "gam3d":1.6666666666666666666666666666666,
     "omega_ns":0.1,
     "threads":32,
@@ -28,5 +28,5 @@
     "implicit_solve_on":false,
     "nuclear_burning_on":true,
     "implicit_iternum":3,
-    "a_isothermal":0.003
+    "a_isothermal":0.0031127
 }

@@ -472,6 +472,8 @@ public:
         // source returns res[4] = d(rhoY)/dt.
         if (nuclear_burning_on && DIM == 5)
         {
+
+            double gam0=2-1/gam;
             // NOTE: In isothermal, pressure is Pi = a^2 * rho.
             const double PI_local = a * a * u[0];
 
@@ -488,15 +490,15 @@ public:
             const double Y = u[4] / u[0];
             const double y = u[0] * 1e7; // column depth proxy
 
-            const double rho5 = g_cgs * u[0] * u[0] * 1e14 / (gam * PI_local * 9e27) / 1e5; // in 1e5 g/cm^3
-            const double T8 = m_alpha / k_b * gam * PI_local * 9e27 / (u[0] * 1e7) / 1e8; // in 1e8 K
+            const double rho5 = g_cgs * u[0] * u[0] * 1e14 / (gam0 * PI_local * 9e27) / 1e5; // in 1e5 g/cm^3
+            const double T8 = m_alpha / k_b * gam0 * PI_local * 9e27 / (u[0] * 1e7) / 1e8; // in 1e8 K
 
 
             const double Q = Q0 * rho5 * rho5 * std::pow(Y, 3) / std::pow(T8, 3) * std::exp(-44.027 / T8)
                             - a0 * c_cgs * std::pow(T8 * 1e8, 4) / (3 * kappa0 * y * y);
 
           
-            res[0]+= gam*(gam-1)*Q*1e7*2.97e-33;
+            res[0]+= (gam0-1)*Q*1e7*2.97e-33/(a*a);
 
 
             res[4] -= Q0 * rho5 * rho5 * std::pow(Y, 3) / std::pow(T8, 3) * std::exp(-44.027 / T8)

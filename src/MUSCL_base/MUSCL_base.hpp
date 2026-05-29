@@ -6,7 +6,8 @@
 #include <array>
 
 //constexpr size_t DIM = 8;
-constexpr size_t DIM = 6;
+//constexpr size_t DIM = 6;
+constexpr size_t DIM = 5;
 //constexpr size_t DIM = 4;
 using StateVec = std::array<double, DIM>;
 
@@ -24,6 +25,7 @@ protected:
     size_t steps, threads;
     double omega_ns;
     bool stop_check = false;
+    bool is_sw=false;
     vector3d<double> omega0;
 
 
@@ -567,13 +569,15 @@ private:
 
                 c_s=std::max(std::sqrt(gam_0 * p / rho), std::sqrt(B_mag * B_mag / (4*M_PI*rho*H)));
 
-            }else if(DIM==4 || (DIM==5 && nuclear_burning_on)){
+            }else if((DIM==4 || (DIM==5 && nuclear_burning_on)) && !is_sw){
                 c_s=a;
 
-            }else
-                {
-                c_s = std::sqrt(gam_0 * p / rho);
-
+            }else if(is_sw){
+               c_s=std::sqrt(GM*rho);
+            }
+            else{
+                 c_s = std::sqrt(gam_0 * p / rho);
+                
             }
 
             if (vel.norm() > max)
@@ -766,7 +770,12 @@ private:
 
     double pressure_fc(StateVec &u, int n_face) // u[4] == energy
     {                   
-        
+        double GM = 0.217909; 
+        if(is_sw)
+        {
+            return GM*u[0]*u[0]/2*1e5;
+        }
+
         if(DIM==4 || (DIM==5 && nuclear_burning_on)){
 
             return u[0]*a*a;
@@ -796,13 +805,11 @@ private:
         // double gam_0 = make_gam(u, r);
 
         double gam_0 = gam;
-        double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
         double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
         double H=(2*gam_0-1)/(gam_0-1)*u[4]/(u[0]*g_eff);
 
         if (var_gamma)
         {
-            double GM = 0.217909;
             double g_eff = GM - vel.norm() * vel.norm();
             double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
             double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
