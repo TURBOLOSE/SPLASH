@@ -41,6 +41,8 @@ protected:
     std::vector<std::vector<std::vector<double>>> betas_plus;  // baricentric distances to H_plus from face centers for each face for each vertice
     std::vector<std::vector<std::vector<double>>> betas_minus; // baricentric distances to H_minus from face centers for each face for each vertice
 
+    std::vector<double> theta_fc, phi_fc; 
+
 public:
     MUSCL_base_geometry(SurfaceMesh mesh)
     {
@@ -187,6 +189,8 @@ public:
             }
 
             face_centers[i] /= faces[i].size();
+            theta_fc.push_back(std::acos(face_centers[i][2] / face_centers[i].norm()));
+            phi_fc.push_back(std::atan2(face_centers[i][1]/ face_centers[i].norm(), face_centers[i][0]/ face_centers[i].norm()));
         }
 
         for (size_t i = 0; i < mesh.n_faces(); i++)
@@ -1181,6 +1185,16 @@ public:
     {
 
         return vertices.size();
+    }
+
+    double get_phi_fc(size_t n_face)
+    {
+        return phi_fc[n_face];
+    }
+
+    double get_theta_fc(size_t n_face)
+    {
+        return theta_fc[n_face];
     }
 
 protected:

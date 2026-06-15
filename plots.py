@@ -1,3 +1,5 @@
+from weakref import ref
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -92,11 +94,12 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
         data_rho.loc[:,:]=data_rho.loc[:,:].astype(float)
     elif(value=='T_sw'):
         data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
-        label_pr='T [K]'
+        label_pr=r'$T[k]$ '
         m_alpha=6.65e-24
         k_b=1.3807e-16
-        GM=0.23
-        data_rho.loc[:,1:]=m_alpha/k_b * gam * GM * data_rho.loc[:,1:] * 9e20 /1e2
+        g0=0.217909
+        data_rho.loc[:,1:]=m_alpha/k_b*g0*data_rho.loc[:,1:]*9e20
+        #print('log T=', np.log10(np.mean(m_alpha/k_b * g0 * h * 9e20)))
     elif(value=='entropy'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
@@ -132,6 +135,36 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
             rho0=data_rho.loc[i,1:]
             x=np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0
             data_rho.loc[i,1:]=x
+    elif(value=='v_phi' or value=='v_phi_sw'):
+        label_pr='V_phi'
+        if(value=='v_phi_sw'):
+            data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
+        else:
+            data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
+        maxstep=len(data_rho.loc[:,0])
+        n_faces=len(data_rho.loc[0,:])-1
+        data_rho=data_rho.astype(float)
+
+        ref = np.array([0.0, 0.0, 1.0])
+        e_phi = np.cross(np.broadcast_to(ref, face_centers.shape), face_centers)
+        e_phi_norm = np.linalg.norm(e_phi, axis=1)
+        near_pole = e_phi_norm < 1e-12
+        if np.any(near_pole):
+            ref2 = np.array([1.0, 0.0, 0.0])
+            e_phi[near_pole] = np.cross(np.broadcast_to(ref2, face_centers[near_pole].shape), face_centers[near_pole])
+            e_phi_norm[near_pole] = np.linalg.norm(e_phi[near_pole], axis=1)
+
+        e_phi = e_phi / e_phi_norm[:, None]
+
+        for i in range(0,maxstep,skipstep):
+            L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
+            rho0=data_rho.loc[i,1:]
+            v=np.cross(face_centers,L)/np.array([rho0,rho0,rho0]).T
+            v_phi = np.einsum('ij,ij->i', v, e_phi)
+            data_rho.loc[i,1:]=v_phi
     elif(value=='h'):
         label_pr='Altitude [cm]'
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
@@ -148,7 +181,7 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
             v=np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0
             GM=0.217909
             g_eff=-v**2+GM
-            data_rho.loc[i,1:]=(2*gam-1)/(gam-1)*data_p.loc[i,1:]/(g_eff*rho0)*1e6
+            data_rho.loc[i,1:]=gam*data_p.loc[i,1:]/(g_eff*rho0)*1e6
 
     else:
         print("wrong type of plot value")
@@ -441,9 +474,9 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
             fig.suptitle('t='+"{:.4f}".format(data_rho.loc[i,0]*3.3e-5)+' s'+extras)
 
             if projection == 'Gall-Peters':
-                ax[0].set_xlabel(rf'$\\frac{{{phi_sym}}}{{\\sqrt{{2}}}}$', fontsize=25)
+                ax[0].set_xlabel(rf'$\frac{{{phi_sym}}}{{\sqrt{{2}}}}$', fontsize=25)
                 # y_plot = sqrt(2) * sin(theta_lat) where theta_lat is latitude (pi/2 - colat)
-                ax[0].set_ylabel(rf'$\\sqrt{{2}}\\,\\sin({lat_sym})$', fontsize=25)
+                ax[0].set_ylabel(rf'$\sqrt{{2}}\sin({lat_sym})$', fontsize=25)
             elif projection == 'Mercator':
                 ax[0].set_xlabel(rf'${phi_sym}$', fontsize=25)
                 # Current implementation uses y_plot = latitude (not log-tan), so label as such.
@@ -479,9 +512,11 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
 
 
 
-projection_plots('T_sw', path="results/", min=None, max=None,skipstep=1,remove_avg_omega=False, print_residuals=False, 
-              log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, minv=0, maxv=0.002, normalized=False, projection='Mercator', tilt_angle=0)#0.0015)
+# projection_plots('T_sw', path='results/', min=None, max=None,skipstep=1,remove_avg_omega=False, print_residuals=False, 
+#               log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, minv=0, maxv=0.004, normalized=False, projection='Mercator', tilt_angle=0)#0.0015)
 
+# projection_plots('rho', path='results/', min=None, max=None,skipstep=1,remove_avg_omega=False, print_residuals=False, 
+#               log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, minv=0, maxv=0.002, normalized=False, projection='Gall-Peters', tilt_angle=0)#0.0015)
 
 # data_rho_c=pd.read_table("results/isoth_cycl9/"+'curl.dat', header=None, delimiter=r"\s+")
 # data_rho_ac=pd.read_table("results/isoth_ac9/"+'curl.dat', header=None, delimiter=r"\s+")
@@ -596,243 +631,7 @@ def integrated_plot(value):
 
 
 
-
-def vel_plot( remove_avg_omega:bool=False, projection:str='Gall-Peters'):
-    gam=1.25
-
-    #turn_angle=np.pi/2
-
-    turn_angle=0
-
-    path_to_res='plots/article_sim_mk2/'
-    #path_to_res='plots/article plots updated/'
-    #path_to_res='results/'
-    #path_to_res='plots/big_quad_next/'
-    #path_to_res='plots/big_sim/'
-    #path_to_res='plots/0.4c crashes/time series/'
-    
-
-    data_full=pd.read_table(path_to_res+'final_state.dat', header=None, delimiter=r"\s+")
-    data_faces=pd.read_table(path_to_res+'faces.dat', header=None, delimiter=r"\s+", names=['col' + str(x) for x in range(6) ])
-    face_centers=pd.read_table(path_to_res+'face_centers.dat', header=None, delimiter=r"\s+")
-    data=pd.read_table(path_to_res+'vertices.dat', header=None, delimiter=r"\s+")
-    vertices=np.array(data.loc[:,:])
-    faces=np.array(data_faces.loc[:,:])
-
-    vel=[]
-    p=[]
-
-
-    turn_matrix=np.matrix([[np.cos(turn_angle),0, np.sin(turn_angle)],[0,1,0],[-np.sin(turn_angle),0, np.cos(turn_angle)]])
-
-
-    for num, el in enumerate(data_full.loc[:,4]):
-        l=np.array([data_full.loc[num,1],data_full.loc[num,2],data_full.loc[num,3]])
-        R=np.array(face_centers.loc[num])
-        vel.append(np.cross(R,l)/(-np.linalg.norm(R)*data_full.loc[num,0]))
-        p.append(data_full.loc[num,0])
-        #p.append((data_full.loc[num,4]-data_full.loc[num,0]/2 * np.linalg.norm(vel[num])**2)*(gam-1))
-
-
-    for ver_num, vertice in enumerate(vertices):
-        vertices[ver_num]=np.matmul(turn_matrix,vertices[ver_num])
-
-    #for face_num, face in enumerate(faces):
-    #    faces[face_num]=np.matmul(turn_matrix,faces[face_num])
-
-
-    faces_new=[]
-
-    for face_num, face in enumerate(faces): #trick for variable length of each face (needed for hex meshes)
-        faces_new.append(face[~np.isnan(face)].astype(int))
-
-    faces=faces_new
-
-
-    theta=-np.arccos(vertices[:,2])+np.pi/2
-    phi=np.arctan2(vertices[:,1],vertices[:,0])
-
-    if projection == 'Gall-Peters':
-        x_plot=phi/(np.sqrt(2)) #projection
-        y_plot=np.sqrt(2)*np.sin(theta)
-    elif projection == 'Mercator':
-        x_plot=phi
-        #y_plot=np.log(np.tan((-theta+np.pi/2)/2 + np.pi/4))
-        y_plot=-theta+np.pi/2
-
-    x_plot_full=[]
-    y_plot_full=[]
-
-
-    for face in faces:
-        temp_x=[]
-        temp_y=[]
-        for face_el in face:
-            temp_x.append(x_plot[face_el])
-            temp_y.append(y_plot[face_el])
-        x_plot_full.append(temp_x)
-        y_plot_full.append(temp_y)
-
-
-    vel=np.array(vel)
-
-    for vel_num, ve in enumerate(vel):
-            vel[vel_num]=np.matmul(turn_matrix,vel[vel_num])
-
-    face_centers=np.array(face_centers)
-
-    for face_cent_num, face_cent in enumerate(face_centers):
-            face_centers[face_cent_num]=np.matmul(turn_matrix,face_centers[face_cent_num])
-
-
-
-    theta_fc=np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1))
-    phi_fc=np.arctan2(face_centers[:,1]/np.linalg.norm(face_centers, axis=1),
-                    face_centers[:,0]/np.linalg.norm(face_centers, axis=1))
-    
-    #==============================================================
-    # omega_z=np.cross(face_centers,vel)[:,2]/np.sin(theta_fc)**2
-
-    # mask_here=np.logical_and(theta_fc>0.05, theta_fc<np.pi-0.05)
-
-    # bins=np.linspace(0.1,np.pi-0.1,200)
-    # digitized = np.digitize(theta_fc, bins)
-    # digitized_masks=[]
-    # for i in range(len(bins)):
-    #     digitized_masks.append(digitized == i)
-
-
-    # bin_omegas=[np.median(omega_z[digitized_masks[i]]) for i in range(len(bins))]      
-    # bin_omegas=np.array(bin_omegas)
-
-
-    # plt.plot(bins, bin_omegas/(3.3e-5*2*np.pi))
-    # #plt.scatter(theta_fc[mask_here], omega_z[mask_here]/(3.3e-5*2*np.pi))
-    # plt.ylabel(r'Freq, Hz')
-    # plt.xlabel(r'$\theta$')
-    # plt.savefig('plots/omegas.png', bbox_inches='tight',dpi=250)
-    # plt.clf()
-    #==============================================================
-
-
-
-    x_fc=phi_fc/np.sqrt(2)
-    y_fc=np.sin(-theta_fc+np.pi/2)*np.sqrt(2)
-
-    for face_num,face in enumerate(faces): #fix x
-        sign_arr=np.sign(x_plot_full[face_num])
-        if( (not (0 in sign_arr)) and (1 in sign_arr) and (-1 in sign_arr) and (np.min(np.abs(x_plot_full[face_num])) > 1)):
-            for i,element in enumerate(x_plot_full[face_num]):
-                if(element < 0):
-                    if projection == 'Gall-Peters':
-                        x_plot_full[face_num][i]+=2*np.pi/np.sqrt(2)
-                    elif projection == 'Mercator':
-                        x_plot_full[face_num][i]+=2*np.pi
-            #x_fc[face_num]+=2*np.pi/np.sqrt(2)
-
-        
-    patches=[]
-    for face_num,face in enumerate(faces):
-        polygon = Polygon(np.vstack([x_plot_full[face_num], y_plot_full[face_num]]).T,closed=True)
-        patches.append(polygon)
-
-
-    #rd=np.sin(theta_fc)*np.cos(phi_fc)*vel[:,0]+np.sin(theta_fc)*np.sin(phi_fc)*vel[:,1]+np.cos(theta_fc)*vel[:,2]
-    theta_d=np.cos(theta_fc)*np.cos(phi_fc)*vel[:,0]+np.cos(theta_fc)*np.sin(phi_fc)*vel[:,1]-np.sin(theta_fc)*vel[:,2]
-    phi_d=(-np.sin(phi_fc)*vel[:,0]+np.cos(phi_fc)*vel[:,1])/np.sin(theta_fc)
-
-
-    if(remove_avg_omega):
-        phi_d-=np.average(phi_d)
-
-
-    for num,ph in enumerate(phi_d):
-        if(ph>1e5 or np.isinf(ph)):
-            phi_d[num]=0
-
-
-
-    xd=phi_d/np.sqrt(2)
-    yd=theta_d*np.sqrt(2)*np.cos(theta_fc)
-
-
-    #ax[0].quiver(x_fc[::3], y_fc[::3],xd[::3],yd[::3])
-    X_gr, Y_gr=np.meshgrid(np.linspace(-2.2,2.2, 100),np.linspace(-1.4, 1.4, 100))
-    #X_gr, Y_gr=np.meshgrid(np.linspace(np.min(x_fc),np.max(x_fc), 100),np.linspace(np.min(y_fc),np.max(y_fc), 100))
-
-    mask=np.logical_or(np.isnan(xd, where=False),np.isnan(xd, where=False))
-
-
-    xd_gr=griddata(np.stack([x_fc[mask].T, y_fc[mask].T]).T, xd[mask],(X_gr,Y_gr), method='nearest')
-    yd_gr=griddata(np.stack([x_fc[mask].T, y_fc[mask].T]).T, yd[mask],(X_gr,Y_gr), method='nearest')    
-
-
-
-    colorm = plt.get_cmap('viridis')
-
-   
-
-    min_p=np.min(p)
-    max_p=np.max(p)
-
-    norm = mpl.colors.Normalize(vmin=min_p, vmax=max_p)
-    mpl.rcParams.update({'font.size': 22})
-
-    #rho=(np.array(p-min_p)/(max_p-min_p))
-    collection = PatchCollection(patches)
-    colors=colorm(norm(p))
-
-    colorm2 = plt.get_cmap('inferno')
-    v=np.sqrt(xd_gr**2+yd_gr**2)
-
-    #print(xd_gr,xd_gr)
-    #print(np.min(v),np.max(v))
-    v_min=np.min(v)
-    v_max=np.max(v)
-
-
-    norm2 = mpl.colors.Normalize(vmin=v_min, vmax=v_max)
-
-
-
-
-    fig, ax = plt.subplots(figsize=(18, 10), layout='constrained', nrows=3,height_ratios=[16,1,1])
-
-    plt.subplots_adjust(hspace=10)
-    
-    fig.suptitle('t='+"{:10.4f}".format(1.3958)+" s")
-    ax[0].set_xlabel(r'$\varphi / \sqrt{2}$', fontsize=25)
-    ax[0].set_ylabel(r'$\sqrt{2}  \cos(\theta )$', fontsize=25)
-    #for face_num,face in enumerate(faces):
-        #ax[0].fill(x_plot_full[face_num], y_plot_full[face_num],facecolor=colorm(rho[face_num]),edgecolor =colorm(rho[face_num]))
-
-    
-    ax[0].add_collection(collection)
-    collection.set_color(colors)
-    ax[0].set_xlim([-2.5, 3.4])
-    ax[0].set_ylim([-1.5, 1.5])
-    #ax[0].quiver(x_fc[::3], y_fc[::3],xd[::3],yd[::3])
-        #if(face_num % 20 == 0):
-    #for face_num,face in enumerate(faces):
-    #    ax[0].arrow(x_fc[face_num],y_fc[face_num],1e-1*xd[face_num],1e-1*yd[face_num],width=0.007, color='grey', alpha=0.9)
-
-    #ax[0].streamplot(X_gr,Y_gr,xd_gr,yd_gr,color=np.sqrt(xd_gr*2*+yd_gr**2), arrowsize=3)
-
-    ax[0].streamplot(X_gr,Y_gr,xd_gr,yd_gr,color=v,norm=norm2, cmap=colorm2, arrowsize=2,density = 1.2)
-    fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colorm),cax=ax[1], orientation='horizontal', label=r'$\Sigma$, $10^7 \rm g \ \rm cm^{-2}$ ')
-    #fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colorm),cax=ax[1], orientation='horizontal', label=r'Speed, c ')
-    fig.colorbar(mpl.cm.ScalarMappable(norm=norm2, cmap=colorm2),cax=ax[2], orientation='horizontal', label=r"v/c")
-    fig.savefig('plots/vel_plot.png', bbox_inches='tight',dpi=150)
-    plt.clf()
-    plt.close()
-
-
-
-#vel_plot(remove_avg_omega=True)
-
-
-
-def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=0, ylim_max:float=0):
+def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=0, ylim_max:float=0, is_log:bool=False):
 
 
     data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
@@ -842,9 +641,17 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
     if(value=='rho'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         label_pr=r'$\Sigma$, $10^7 \rm g \ \rm cm^{-2}$ '
-    if(value=='h_sw'):
+    elif(value=='h_sw'):
         data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
         label_pr=r'$h$ '
+    elif(value=='T_sw'):
+        data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
+        label_pr=r'T[K] '
+        m_alpha=6.65e-24
+        k_b=1.3807e-16
+        g0=0.217909
+        data_rho.loc[:,1:]=m_alpha/k_b*g0*data_rho.loc[:,1:]*9e20
+        #print('log T=', np.log10(np.mean(m_alpha/k_b * g0 * h * 9e20)))
     elif(value=='p'):
         data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
         label_pr='Pressure'
@@ -874,11 +681,30 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
         #data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
         label_pr='Entropy'
         data_rho.loc[:,1:]=data_p.loc[:,1:]/(data_rho.loc[:,1:]** 1.25)  #( (10-3*data_beta.loc[:,1:])/(8-3*data_beta.loc[:,1:]) )   )
-
+    elif(value=='T'):
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        data_rho.loc[:,:]=data_rho.loc[:,:].astype(float)
+        data_p.loc[:,:]=data_p.loc[:,:].astype(float)
+        label_pr='T [K]'
+        m_alpha=6.65e-24
+        k_b=1.3807e-16
+        data_rho.loc[:,1:]=m_alpha/k_b * 1.25 * (data_p.loc[:,1:]*9.0e27)/ ( (data_rho.loc[:,1:]*1.0e7))
+        data_rho.loc[:,:]=data_rho.loc[:,:].astype(float)
+    elif(value=='rho3'):
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        data_rho.loc[:,:]=data_rho.loc[:,:].astype(float)
+        data_p.loc[:,:]=data_p.loc[:,:].astype(float)
+        label_pr=r'\rho, 10^5 g/cm^3'
+        a=11e5
+        g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); 
+        data_rho.loc[:,1:]=g*data_rho.loc[:,1:]**2*1e14/(1.25*data_p.loc[:,1:]*9e27)/1e5
+        data_rho.loc[:,:]=data_rho.loc[:,:].astype(float)
     elif(value=='vel_abs'):
         print("speed")
         label_pr='Speed'
-        data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
         data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
         data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
@@ -901,6 +727,8 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
 
     maxstep=len(data_rho.loc[:,0])
 
+
+
     if(ylim_min==0 and ylim_max==0):
         ylim_min=np.min(data_rho.loc[:,1:])*0.9
         ylim_max=np.max(data_rho.loc[:,1:])*1.1
@@ -908,17 +736,21 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
     for i in tqdm(range(maxstep)):
         if((i % skipstep)==0 ):
             plt.scatter(theta_fc, data_rho.loc[i,1:], s=2)
+            #plt.plot(theta_fc, 1/np.cos(theta_fc))
             plt.xlabel(r'$\theta$')
             plt.ylabel(label_pr)
+            if(is_log):
+                plt.yscale('log')
             plt.title('t='+"{:.4f}".format(data_rho.loc[i,0]*3.3e-5)+' s')
             plt.ylim([ylim_min, ylim_max])
-            plt.savefig('plots/rho_vs_theta_'+"{0:0>4}".format(i)+'.png', bbox_inches='tight',dpi=200)
+            plt.savefig('plots/T_vs_theta_'+"{0:0>4}".format(i)+'.png', bbox_inches='tight',dpi=200)
             plt.clf()
             plt.close()
 
 
 
-#plot_vs_theta('h_sw',path='results/', skipstep=5, ylim_min=0, ylim_max=0)
-#plot_vs_theta('vel_abs',path='results/', skipstep=5, ylim_min=0, ylim_max=1)
+plot_vs_theta('T_sw',path="results/", skipstep=5, ylim_min=0, ylim_max=0,is_log=False)
+#plot_vs_theta('vel_abs',path='results/', skipstep=10, ylim_min=0, ylim_max=1e-3)
+#plot_vs_theta('omega',path='results/burst_1e6_2e8/', skipstep=5, ylim_min=0, ylim_max=0,is_log=True)
 
 

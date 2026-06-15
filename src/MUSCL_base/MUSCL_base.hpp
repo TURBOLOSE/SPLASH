@@ -17,11 +17,12 @@ class MUSCL_base : public MUSCL_base_geometry
 protected:
     std::vector<StateVec> U, U_temp, U_temp_1, source_plus;
     std::vector<double> rho_an, p_an;
+    std::vector<size_t> main_faces, main_faces_map;
     std::vector<std::vector<StateVec>> flux_var_plus, flux_var_minus, U_plus, U_minus;
     // flux_var^plus_ij flux_var^minus_ij, U_ij (short), U_ji(short)
     double dt, gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, density_floor, Y_floor, pressure_floor, CFL,a, min_dt=1e-10;
     int implicit_iternum;
-    bool var_gamma, implicit_solve_on, non_inertial_rf_on, mag_field_on, centrifugal_force_on, nuclear_burning_on;
+    bool var_gamma, implicit_solve_on, non_inertial_rf_on, mag_field_on, centrifugal_force_on, nuclear_burning_on, oned_testing_mode;
     size_t steps, threads;
     double omega_ns;
     bool stop_check = false;
@@ -87,8 +88,9 @@ public:
         a=parameters["a_isothermal"];
         omega_ns = parameters["omega_ns"];
         nuclear_burning_on = parameters["nuclear_burning_on"];
+        oned_testing_mode = parameters["oned_testing_mode"];
 
-
+        std::vector<double> main_faces_thetas;
 
 
         if(mag_field_on && DIM!=8){
@@ -139,6 +141,59 @@ public:
 
         t = 0;
         steps = 0;
+
+        if(oned_testing_mode){
+
+            for(size_t i=0; i<nf; i++)
+            {
+                double phi_fc=get_phi_fc(i);
+                if(std::abs(phi_fc-0.1)<2*0.015){
+                    main_faces.push_back(i);
+                    main_faces_thetas.push_back(get_theta_fc(i));
+                }
+            }
+
+            if(main_faces.empty()){
+                std::cout<<"oned_testing_mode: no main faces found near phi=0\n";
+                stop_check=true;
+                exit(1);
+            }
+
+
+            for(size_t i=0; i<nf; i++)
+            {
+                double theta_fc=get_theta_fc(i);
+
+                if(std::find(main_faces.begin(), main_faces.end(), i) != main_faces.end()){
+                    main_faces_map.push_back(i);
+                }
+                else{
+                    size_t closest_idx = 0;
+                    double min_diff = std::abs(main_faces_thetas[0] - theta_fc);
+                    for(size_t j=1; j<main_faces_thetas.size(); j++){
+                        double diff = std::abs(main_faces_thetas[j] - theta_fc);
+                        if(diff < min_diff){
+                            min_diff = diff;
+                            closest_idx = j;
+                        }
+                    }
+                    main_faces_map.push_back(main_faces[closest_idx]);
+                }
+            }
+
+
+            //std::cout<<main_faces_map[114]<<" "<<main_faces_map[37]<<"\n";
+            // std::sort(main_faces_map.begin(), main_faces_map.end());
+            // auto unique_mfm = std::unique(main_faces_map.begin(), main_faces_map.end());
+            // main_faces_map.resize(std::distance(main_faces_map.begin(), unique_mfm));
+
+
+            // for(auto face: main_faces_map){
+            //     std::cout<<"main face "<<face<<" theta="<<get_theta_fc(face)<<"\n";
+            // }
+
+        }
+
     };
 
     void set_min_values()
@@ -196,41 +251,6 @@ public:
 
         if (implicit_solve_on)
         {
-            //first iteration is different
-            //initial U is euler explicit
-            
-            
-            /*
-            find_U_edges();
-            find_flux_var();
-            res2d(dt); //  U = dt*phi(U)
-            
-            for (size_t i = 0; i < this->n_faces(); i++)
-            {
-
-                if (U[i][0] < density_floor)
-                    U[i][0] = density_floor; // density floor
-            }
-
-            U_temp_1 = U;
-            find_U_edges();
-            find_flux_var();
-            res2d(dt); //  U = dt*phi(dt*phi(U))
-            
-            //now U = dt*phi(dt*phi(U)); U_temp=U (initial); U_temp_1=dt*phi(U)
-
-
-            for (size_t i = 0; i < this->n_faces(); i++)
-                {
-
-                    for (size_t k = 0; k < DIM; k++)
-                    {
-                        U[i][k] = U_temp[i][k]+U[i][k]/2+U_temp_1[i][k];
-                    }
-                    if (U[i][0] < density_floor)
-                        U[i][0] = density_floor; // density floor
-                }*/
-
             find_U_edges();
             find_flux_var();
 
@@ -258,6 +278,7 @@ public:
             find_U_edges();
             find_flux_var();
             res2d(dt); // U=dt*phi( U+dt/2*phi(U))
+
 
             for (size_t i = 0; i < nf; i++)
             {
@@ -308,15 +329,54 @@ public:
         else
         {
 
+            vector3d<double> r_main, r_here,vel, l_vec, vel_next;
+            double omega_z1, theta, phi, v_theta, v_phi;
+
+            if(oned_testing_mode){
+            for (size_t i = 0; i < nf; i++)
+            {
+                    const size_t src_face = main_faces_map[i];
+                    const StateVec& src_state = U_temp[src_face];
+
+                    U[i] = src_state;
+
+                    l_vec[0] = src_state[1];
+                    l_vec[1] = src_state[2];
+                    l_vec[2] = src_state[3];
+
+                    r_main=face_centers[src_face]/face_centers[src_face].norm();
+                    vel = cross_product(r_main, l_vec);
+                    vel /= (-src_state[0]);
+                    theta=std::acos(r_main[2]);
+                    phi=std::atan2(r_main[1],r_main[0]);
+                    v_theta = vel[0]*cos(theta)*cos(phi) + vel[1]*cos(theta)*sin(phi) - vel[2]*sin(theta);
+                    v_phi = -vel[0]*sin(phi) + vel[1]*cos(phi);
+
+                    r_here=face_centers[i]/face_centers[i].norm();
+                    theta=std::acos(r_here[2]);
+                    phi=std::atan2(r_here[1],r_here[0]);
+                    vel_next[0] = v_theta*cos(theta)*cos(phi) - v_phi*sin(phi);
+                    vel_next[1] = v_theta*cos(theta)*sin(phi) + v_phi*cos(phi);
+                    vel_next[2] = -v_theta*sin(theta);
+
+                    l_vec= cross_product(r_here, vel_next);
+                    l_vec *= src_state[0];
+                    U[i][1]=l_vec[0];
+                    U[i][2]=l_vec[1];
+                    U[i][3]=l_vec[2];
+
+                }
+            }
+
+
             find_U_edges();
             find_flux_var();
-
             res2d(dt / 2); // res2d makes U = dt/2*phi(U)
 
             for (size_t i = 0; i < nf; i++)
             {
 
-                for (size_t k = 0; k < DIM; k++)
+                for (size_t k = 0; k < DIM; k++) //U=U+dt/2*phi(U)
                 {
                     U[i][k] += U_temp[i][k];
                 }
@@ -324,24 +384,29 @@ public:
                 if (U[i][0] < density_floor)
                     U[i][0] = density_floor; // density floor
             }
+
+            
 
             find_U_edges();
             find_flux_var();
             res2d(dt); // U=dt*phi( U+dt/2*phi(U))
 
+
+            
             for (size_t i = 0; i < nf; i++)
             {
 
-                for (size_t k = 0; k < DIM; k++)
+                for (size_t k = 0; k < DIM; k++) //U=U+dt*phi( U+dt/2*phi(U))
                 {
                     U[i][k] += U_temp[i][k];
                 }
                 if (U[i][0] < density_floor)
                     U[i][0] = density_floor; // density floor
-
-                //if(i==3729)
-                //    std::cout<<i<<" density ="<<U[i][0]<<"\n";
             }
+
+
+
+
         }
 
         double temp = 0;

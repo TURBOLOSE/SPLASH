@@ -14,7 +14,7 @@ protected:
     std::ofstream outfile_l[3], outfile_B[3];
     bool accretion_on, friction_on, smooth_acc_on, extra_heat_on;
     double total_mass, acc_rate, e_acc, omega_acc_abs, tilt_angle, acc_width, area_coeff, alpha, t_acc, extra_heat_power;
-    double en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o, en_gain_burning_o;
+    double en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o, en_gain_burning_o, en_gain_other_o, en_loss_other_o;
 
 
 public:
@@ -22,7 +22,7 @@ public:
         : MUSCL_base(mesh, U_in, gam, omega_ns_i, threads), accretion_on(accretion_on_i)
     {
 
-        en_gain_acc_o=0; en_loss_fall_o=0; en_loss_fric_o=0; en_loss_rad_o=0;
+        en_gain_acc_o=0; en_loss_fall_o=0; en_loss_fric_o=0; en_loss_rad_o=0; en_gain_burning_o=0; en_gain_other_o=0; en_loss_other_o=0;
 
         set_min_values();
 
@@ -333,6 +333,7 @@ public:
     {
         // roation around z axis is implied
         std::vector<double> result;
+        
 
         vector3d<double> obs_vector_0, obs_vector_45, obs_vector_90, obs_vector_180, l_vec, vel;
         obs_vector_0[0] = 9.4 * 3 * 1e19 / 15000;
@@ -380,7 +381,9 @@ public:
                 double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); //
                 double eps_alpha=1.17e-5; // erg
                 double a0=7.56e-15; //erg/(cm^3 k^4)
+                //double ksb=5.6e-5; // Stefan-Boltzmann constant in erg/(cm^2 s K^4)
                 double Y=U[n_face][5]/U[n_face][0]; // mass fraction of helium
+                
 
                 double y=U[n_face][0]*1e7;
 
@@ -394,6 +397,7 @@ public:
                 //std::cout<<T8<<"\n";
 
                 double Q=a0*c*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
+                //double Q=ksb*c*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
                 double dQ_dt =Q*U[n_face][0]*1e7*2.97e-33; //back to code units * sigma
                 E=dQ_dt;
 
@@ -402,6 +406,16 @@ public:
                 // E = GM/ kappa * (1 - betas[n_face]);
 
 
+            }
+
+            if(non_inertial_rf_on){
+                double turn_angle=omega_ns * this->time();
+                phi_fc += turn_angle;
+                phi_fc=std::fmod(phi_fc, 2*M_PI)-M_PI;
+
+                obs_vector_0[0] = std::cos(turn_angle)*9.4 * 3 * 1e19 / 15000;
+                obs_vector_0[1] = std::sin(turn_angle)*9.4 * 3 * 1e19 / 15000;
+                obs_vector_0[2] = 0; 
             }
             
 
@@ -447,7 +461,7 @@ public:
 
     std::vector<double> get_energy_changes(){
         
-    return {en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o,en_gain_burning_o};
+    return {en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o,en_gain_burning_o, en_gain_other_o, en_loss_other_o};
     };
 
     void write_final_state()
@@ -706,55 +720,53 @@ protected:
 
         }
 
-        if(nuclear_burning_on && DIM==6){
-
+        if(nuclear_burning_on && DIM==6 ){
+            // t< 1000, t<500
             
             double Q0=5.3e21;
-            double kappa0=0.03; //opacity 0.34 cm^2/g
+            double kappa0=0.03; // cm^2/g
+            //double kappa0=0.34; // cm^2/g
             //double y=1e8; //col depth g/cm^2
             double m_alpha=6.65e-24; // mass of alpha particle in g
             double k_b=1.3807e-16; // Boltzmann constant in erg/K
-            double c=3e10; // speed of light in cm/s
+            double c=3e10; // speed of light in cm/
             double a=11e5; //radius in cm
             double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); 
-            double eps_alpha=1.17e-5; // erg
+            double eps_alpha=1.16e-5; // erg
             double a0=7.56e-15; //erg/(cm^3 k^4)
+            //double ksb=5.6e-5; // Stefan-Boltzmann constant in erg/(cm^2 s K^4)
             double Y=u[5]/u[0]; // mass fraction of helium
 
             double y=u[0]*1e7;
 
 
-            double rho5=g*u[0]*u[0]*1e14/(gam*u[4]*9e27)/1e5; // density in 10^5 g/cm^3
+            double rho5=g*u[0]*u[0]*1e14/(gam_0*u[4]*9e27)/1e5; // density in 10^5 g/cm^3
 
 
             double T8=m_alpha/k_b * gam_0*u[4]*9e27/(u[0]*1e7)/1e8; // temperature in 10^8 K       
             double Q=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8) - a0*c*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
-
+            //double Q=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8) - ksb*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
 
             res[4]+=Q*u[0]*1e7*2.97e-33; //back to code units * sigma
 
+            double sigma_sb=5.6e-5;
+            double T_const_heat=1e5;
+            res[4]+=sigma_sb*pow(T_const_heat,4)/9e27 * 3.3e-5; //const heat bonus
+
             double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
-            double kappa = 3.4e6; // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
+           // double kappa = 3.4e6; // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
 
-            //std::cout<<Q0*rho5*rho5*pow(u[5],3)/pow(T8,3)*exp(-44.027/T8)*u[0]*1e7*2.97e-33<<"\n"
-
-            //             if(n_face==2111){
-            
-            // for(int i=0; i<DIM; i++)
-            //     std::cout<<u[i]<<" ";
-            // std::cout<<"\n";
-
-            // std::cout<<Q0*rho5*rho5*pow(u[5],3)/pow(T8,3)*exp(-44.027/T8)/(a0*c*pow(T8*1e8,4)/(3*kappa0*y*y))<<"\n";
-
-            //  }
-            //res[5]+=Q*3*m_alpha/eps_alpha;
 
             res[5]-=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*1e7*2.97e-33*3*m_alpha/eps_alpha*9e20;
 
-            en_gain_burning_o+=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*1e7*2.97e-33*surface_area[n_face];
+            
+            en_gain_burning_o+=dt/2.*Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*1e7*2.97e-33*surface_area[n_face];
 
-            en_loss_rad=-a0*c*pow(T8*1e8,4)/(3*kappa0*y*y)*u[0]*1e7*2.97e-33*surface_area[n_face];
+            en_loss_rad=-dt/2.*a0*c*pow(T8*1e8,4)/(3*kappa0*y*y)*u[0]*1e7*2.97e-33*surface_area[n_face];
+            //en_loss_rad=-dt/2.*ksb*pow(T8*1e8,4)/(3*kappa0*y*y)*u[0]*1e7*2.97e-33*surface_area[n_face];
             en_loss_rad_o+=en_loss_rad;
+            
+            en_gain_other_o+=dt/2.*sigma_sb*pow(T_const_heat,4)/9e27 * 3.3e-5*surface_area[n_face];
 
             //res[5]-= GM / kappa * (1 - beta)*3*m_alpha/eps_alpha*u[0] * 1e19*1e19/(3.3e-5*3.3e-5);
         }

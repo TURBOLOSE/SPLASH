@@ -17,6 +17,7 @@ int main()
     //SurfaceMesh mesh = icosphere(5);
     SurfaceMesh mesh = icosphere_hex(5);
     //SurfaceMesh mesh = uv_sphere_2(128,65);
+    //SurfaceMesh mesh = uv_sphere_2(256,130);
 
     // MUSCL_base_geometry test(mesh);
 
@@ -141,11 +142,11 @@ int main()
     out_lc_180<<std::setprecision(9) << test2.time() << " " << lightcurves[3] << "\n";
     out_lc_180.flush();
 
-
-    // out_deltaE<< "t, en_gain_acc, en_loss_fall, en_loss_fric, en_loss_rad \n";
+    //en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o,en_gain_burning_o, en_gain_other_o, en_loss_other_o
+    out_deltaE<< "t, en_loss_rad, en_gain_burning, en_gain_other \n";
 
         // en_changes=test2.get_energy_changes();
-        // out_deltaE<<test2.time() << " "<<en_changes[3]<< " "<<en_changes[4]<<"\n";
+        // out_deltaE<<test2.time() << " "<<en_changes[3]<< " "<<en_changes[4]<< " "<<en_changes[5]<<"\n";
         // out_deltaE.flush();
     
 
@@ -153,6 +154,7 @@ int main()
     size_t steps = 0;
     while (test2.time() < t_max && steps < maxstep)
     {
+
         test2.do_step(dt);
 
         lightcurves = test2.get_light_curves();
@@ -166,8 +168,9 @@ int main()
         out_lc_180.flush();
 
 
+
         // en_changes=test2.get_energy_changes();
-        // out_deltaE<<test2.time() << " "<<en_changes[3]<< " "<<en_changes[4]<<"\n";
+        // out_deltaE<<test2.time() << " "<<en_changes[3]<< " "<<en_changes[4]<< " "<<en_changes[5]<<"\n";
         // out_deltaE.flush();
 
 
