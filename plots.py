@@ -95,7 +95,7 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
     elif(value=='T_sw'):
         data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
         label_pr=r'$T[k]$ '
-        m_alpha=6.65e-24
+        m_alpha=6.65e-24/3
         k_b=1.3807e-16
         g0=0.217909
         data_rho.loc[:,1:]=m_alpha/k_b*g0*data_rho.loc[:,1:]*9e20
@@ -289,7 +289,6 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
     vertices=np.array(data.loc[:,:])
     faces=np.array(data_faces.loc[:,:])
 
-
     #==============================================================================================
 
     # theta=-np.arccos(np.array(face_centers)[:,2]/np.linalg.norm(np.array(face_centers), axis=1)) 
@@ -313,6 +312,8 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
 
     for face_num, face in enumerate(faces): #trick for variable length of each face (needed for hex meshes)
         faces_new.append(face[~np.isnan(face)].astype(int))
+        #if(np.isnan(face[5])):
+            #print(-theta_fc[face_num]+np.pi/2)
     faces=faces_new
 
 
@@ -548,6 +549,13 @@ def integrated_plot(value):
     elif(value=='Y'):
         data_rho=pd.read_table(path+'Y.dat', header=None, delimiter=r"\s+")
         label_pr='Y'
+    elif(value=='T_sw'):
+        data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
+        label_pr=r'$T_8 [K]$ '
+        m_alpha=6.65e-24/3
+        k_b=1.3807e-16
+        g0=0.217909
+        data_rho.loc[:,1:]=m_alpha/k_b*g0*data_rho.loc[:,1:]*9e20/1e8
     elif(value=='vel_abs'):
         label_pr='Speed'
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
@@ -626,7 +634,7 @@ def integrated_plot(value):
     plt.close()
 
 
-#integrated_plot('h_sw')
+#integrated_plot('Y')
 
 
 
@@ -650,7 +658,7 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
         m_alpha=6.65e-24
         k_b=1.3807e-16
         g0=0.217909
-        data_rho.loc[:,1:]=m_alpha/k_b*g0*data_rho.loc[:,1:]*9e20
+        data_rho.loc[:,1:]=m_alpha/k_b*g0*data_rho.loc[:,1:]*9e20/3
         #print('log T=', np.log10(np.mean(m_alpha/k_b * g0 * h * 9e20)))
     elif(value=='p'):
         data_rho=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
@@ -687,7 +695,7 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
         data_rho.loc[:,:]=data_rho.loc[:,:].astype(float)
         data_p.loc[:,:]=data_p.loc[:,:].astype(float)
         label_pr='T [K]'
-        m_alpha=6.65e-24
+        m_alpha=6.65e-24/3
         k_b=1.3807e-16
         data_rho.loc[:,1:]=m_alpha/k_b * 1.25 * (data_p.loc[:,1:]*9.0e27)/ ( (data_rho.loc[:,1:]*1.0e7))
         data_rho.loc[:,:]=data_rho.loc[:,:].astype(float)
@@ -749,7 +757,7 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
 
 
 
-plot_vs_theta('T_sw',path="results/", skipstep=5, ylim_min=0, ylim_max=0,is_log=False)
+plot_vs_theta('T_sw',path="results/", skipstep=1, ylim_min=0, ylim_max=0,is_log=False)
 #plot_vs_theta('vel_abs',path='results/', skipstep=10, ylim_min=0, ylim_max=1e-3)
 #plot_vs_theta('omega',path='results/burst_1e6_2e8/', skipstep=5, ylim_min=0, ylim_max=0,is_log=True)
 

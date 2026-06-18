@@ -2556,7 +2556,7 @@ def make_input_5N_cos_bell():
 
 
 
-    Omega0=0.1
+    Omega0=0.01
 
 
     p_fluc=0.75
@@ -2598,7 +2598,7 @@ def make_input_5N_cos_bell():
     theta=np.arccos(face_centers[:,2])
 
     #pd.DataFrame(data=np.array([h, l[:,0],l[:,1],l[:,2]]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
-    pd.DataFrame(data=np.array([h, l[:,0],l[:,1],l[:,2], np.ones(N)]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
+    pd.DataFrame(data=np.array([h, l[:,0],l[:,1],l[:,2], h]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
 
 
 
@@ -2629,7 +2629,7 @@ def make_input_5N_equatorial_hot_spot():
 
 
 
-    Omega0=0.1
+    Omega0=0.5
 
 
     #p_fluc=0.75
@@ -2638,11 +2638,35 @@ def make_input_5N_equatorial_hot_spot():
     #h0=2e-3
     #h0=2e-5
     #h0=4e-4
-    h0=0.2e-4
-    p_fluc=0
+
+
+    # h0=1e-4
+    # p_fluc=0
+
+    # h0=5e-4 #works really well
+    # p_fluc=0
+
+    # h0=2e-4 #first approx
+    # p_fluc=0.5
+
+    # h0=6e-5
+    # p_fluc=0.6
+
+    # h0=8e-5
+    # p_fluc=0
+
+    h0=7e-5
+    p_fluc=0.4
+
+
+
+
 
     lat = np.pi / 2 - theta
-    h = h0 * (1.0 + p_fluc * np.tanh(3 - 8 * np.abs(lat)))
+    #h = h0 * (1.0 + p_fluc * np.tanh(3 - 8 * np.abs(lat)))
+    h = h0 * (1.0 + p_fluc * np.tanh(3 - 5 * np.abs(lat)))
+
+    print('h range: ', np.min(h), ' to ', np.max(h))
 
     # Shallow-water pressure p = g h^2 / 2, so geostrophic balance is
     #   f v_phi = (1/h) dp/dtheta = g dh/dtheta.
@@ -2668,6 +2692,7 @@ def make_input_5N_equatorial_hot_spot():
         #v[i]=np.array([0,0,0])
     
 
+   #m_alpha=6.65e-24 #g
     m_alpha=6.65e-24 #g
     k_b=1.3807e-16 #erg/K
     g_cgs=0.217909 * 1e18 / (3.3e-5 * 3.3e-5 * 1e12) #cm/s^2
@@ -2676,29 +2701,31 @@ def make_input_5N_equatorial_hot_spot():
     eps_alpha = 1.17e-5 #erg per 3alpha
     kappa0 = 0.03 #cm^2/g
     Q_0 = 5.3e21 #erg/(g*s)
-    T8_0=m_alpha/k_b * g_cgs * h0*1e6/1e8 
+    T8_0=m_alpha/(3*k_b) * g_cgs * h0*1e6/1e8 
     y =5.4e8 #g/cm^2
+    #y=5e7 #g/cm^2
     rho5=(y/(h0*1e6))/1e5
     Y_0=1
     a0 = 7.56e-15 #erg/cm^3/K^4
 
     soleq=lambda T8: Q_0*rho5**2*Y_0**3/T8**3*np.exp(-44/T8)-a0*c_cgs*(T8*1e8)**4/(3*kappa0*y**2)
-    T8_eq=fsolve(soleq, T8_0)[0]
+    T8_eq=fsolve(soleq, 2e9)[0]
 
     T_dot=Q_0*rho5**2*Y_0**3/T8_0**3*np.exp(-44/T8_0)*m_alpha/k_b
     t_eq=np.abs(T8_0-T8_eq)*1e8/T_dot
     
     print('rho_5=', rho5)
     print('T8_eq=', T8_eq, ', func = ', soleq(T8_eq))
-    print('min T=', (np.min(m_alpha/k_b * g_cgs * h*1e6))/1e8, '*1e8 K')
+    print('min T=', (np.min(m_alpha/(3*k_b) * g_cgs * h*1e6))/1e8, '*1e8 K')
+    print('max T=', (np.max(m_alpha/(3*k_b) * g_cgs * h*1e6))/1e8, '*1e8 K')
     print('t_eq~', t_eq, 's')
     print('v_max=', np.max(np.linalg.norm(v, axis=1)))
     print('c_s=', np.sqrt(g0*h0))
-    print('min h=', np.min(h)*10000, 'm')
+    print('min h=', np.min(h), 'R')
 
     theta=np.arccos(face_centers[:,2])
 
-    pd.DataFrame(data=np.array([h, l[:,0],l[:,1],l[:,2], Y_0*np.ones(N)]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
+    pd.DataFrame(data=np.array([h, l[:,0],l[:,1],l[:,2], Y_0*h]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
 
 
 

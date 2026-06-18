@@ -743,22 +743,23 @@ protected:
             double rho5=g*u[0]*u[0]*1e14/(gam_0*u[4]*9e27)/1e5; // density in 10^5 g/cm^3
 
 
-            double T8=m_alpha/k_b * gam_0*u[4]*9e27/(u[0]*1e7)/1e8; // temperature in 10^8 K       
+            double T8=m_alpha/k_b * gam_0*u[4]*9e27/(u[0]*1e7)/1e8 /3; // temperature in 10^8 K       
             double Q=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8) - a0*c*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
             //double Q=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8) - ksb*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
 
             res[4]+=Q*u[0]*1e7*2.97e-33; //back to code units * sigma
 
             double sigma_sb=5.6e-5;
-            double T_const_heat=1e5;
+            double T_const_heat=5e6;
             res[4]+=sigma_sb*pow(T_const_heat,4)/9e27 * 3.3e-5; //const heat bonus
 
             double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
            // double kappa = 3.4e6; // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
 
 
-            res[5]-=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*1e7*2.97e-33*3*m_alpha/eps_alpha*9e20;
-
+            //res[5]-=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*1e7*2.97e-33*3*m_alpha/eps_alpha*9e20;
+            res[5]-=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*1e7*3*m_alpha/eps_alpha*3.3e-5;
+            
             
             en_gain_burning_o+=dt/2.*Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*1e7*2.97e-33*surface_area[n_face];
 

@@ -211,9 +211,15 @@ public:
                 min_p = p;
         }
 
+
         density_floor = min_rho * 1e-9;
         pressure_floor = min_p * 1e-9;
         Y_floor=0;
+
+        if(is_sw && nuclear_burning_on){
+          density_floor = min_rho*1e-1;  
+        }
+
     };
 
 

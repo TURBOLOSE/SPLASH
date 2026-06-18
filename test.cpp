@@ -5,7 +5,7 @@
 #include "src/Riemann_solvers/HLLC.hpp"
 #include "src/Riemann_solvers/HLLD.hpp"
 #include "src/Riemann_solvers/HLLCplus.hpp"
-
+#include "src/Riemann_solvers/HLLC_sw.hpp"
 
 using namespace pmp;
 
@@ -98,7 +98,8 @@ int main()
     }
 
     //MUSCL_HLLE test2(mesh, U_in, gam, threads);
-    MUSCL_HLLE_sw test2(mesh, U_in, gam, threads);
+    //MUSCL_HLLE_sw test2(mesh, U_in, gam, threads);
+    MUSCL_HLLC_sw test2(mesh, U_in, gam, threads);
     //MUSCL_HLLE_p test2(mesh, U_in, gam,omega_ns, threads);
     //MUSCL_HLLC test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
     //MUSCL_HLLCplus test2(mesh, U_in, gam, omega_ns, accretion_on, threads);
