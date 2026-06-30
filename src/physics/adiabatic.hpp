@@ -1180,7 +1180,7 @@ protected:
         // else
         // {
 
-        double res=(u[4] - u[0] * (vel.norm() * vel.norm()) / 2*H) * (gam_0 - 1);
+        double res=(u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1);
 
         if(mag_field_on){
             vector3d<double> B;

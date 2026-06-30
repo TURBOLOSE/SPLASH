@@ -364,7 +364,7 @@ def make_input_5_sp_layer_diff_rot():
     omega_ns=0
 
 
-    omega=np.array([0,0,0.01])/V_conv #c
+    omega=np.array([0,0,0.1])/V_conv #c
 
     omega_0=omega
     

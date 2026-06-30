@@ -109,7 +109,7 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
             rho0=data_rho.iloc[i,1:].to_numpy(dtype=float)
             vel_i=np.cross(face_centers,L)/rho0[:,None]
             g_eff =   GM - np.linalg.norm(vel_i, axis=1)**2 
-            data_rho.loc[i,1:]=(2*gam-1)*(gam-1)*data_p.iloc[i,1:]/(data_rho.iloc[i,1:]*g_eff) * 1e6
+            data_rho.loc[i,1:]=gam*data_p.iloc[i,1:]/(data_rho.iloc[i,1:]*g_eff) * 1e6
 
     elif value=='L':
         label_pr=r'T (K)'
@@ -143,7 +143,7 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
         j=0
         for step in tqdm(range(0,maxstep,skipstep)):
             #data_rho.loc[step,1:]=(g_eff[j] / kappa * (1 - data_beta[step])* surface_area)*9e27*1e12/(3.3e-5) /4e33 
-            data_rho.loc[step,1:]=np.power((g_eff[j] / kappa * (1 - data_beta[step])* surface_area)*9e27*1e12/(3.3e-5) /(5.6e-5),1/4) 
+            data_rho.loc[step,1:]=np.power((g_eff[j] / kappa * (1 - data_beta[step])* surface_area)*9e27/(3.3e-5) /(5.6e-5),1/4) 
             j+=1
 
 
@@ -417,8 +417,8 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
 
 
 
-projection_plots("rho", path='plots/res26_3/', min=None, max=None,skipstep=1000,remove_avg_omega=False, print_residuals=False, 
-                 log=False, add_streamplot=True, deltaplot=False, reldeltaplot=False, skiprows=0,total_steps=0, tilt_angle=0.1)
+# projection_plots("rho", path='plots/res26_3/', min=None, max=None,skipstep=1000,remove_avg_omega=False, print_residuals=False, 
+#                  log=False, add_streamplot=True, deltaplot=False, reldeltaplot=False, skiprows=0,total_steps=0, tilt_angle=0.1)
 
 
 
@@ -430,6 +430,7 @@ def integrated_plot(value:str, path:str='results/', kinetic_component:str='total
     #value = rho,p
 
     gam=2-1/(5/3)
+    fig_size=(6, 5)
     #path='results/'
     #path='plots/cooling/'
 
@@ -446,6 +447,48 @@ def integrated_plot(value:str, path:str='results/', kinetic_component:str='total
     elif(value=='omega'):
         data_rho=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+")
         label_pr='Omega_z'
+    elif value=='L':
+        label_pr=r'T (K)'
+        face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
+        face_centers=np.array(face_centers)
+        face_centers_norm=np.linalg.norm(face_centers, axis=1)
+        face_centers=face_centers/np.array([face_centers_norm, face_centers_norm, face_centers_norm]).T
+
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+
+        # data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
+        # data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
+        # data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
+
+        data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+")
+        print("done reading")
+        #maxstep=np.min([len(data_rho.loc[:,0]), len(data_p.loc[:,0]),len(data_Lx.loc[:,0]),len(data_Ly.loc[:,0]),len(data_Lz.loc[:,0]), len(data_beta.loc[:,0])])
+        maxstep=np.min([len(data_rho.loc[:,0]), len(data_p.loc[:,0])])
+        skipstep=100
+
+        data_beta=np.array(data_beta.loc[:,1:])
+        vel=[]
+
+        # for i in tqdm(range(0,maxstep,skipstep)):
+        #     L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
+        #     rho0=data_rho.loc[i,1:]
+        #     vel.append(np.linalg.norm(np.cross(face_centers,L), axis=1)/rho0)
+        # vel=np.array(vel)
+
+
+        surface_area=4*np.pi/len(face_centers)
+        kappa = 3.4e6 #// scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
+        GM = 0.217909 # grav parameter in R_unit^3/t_unit^2
+        #g_eff =  - vel * vel + GM
+        g_eff=0.174*np.ones(maxstep)
+        print(np.mean(g_eff))
+        j=0
+        for step in tqdm(range(0,maxstep,skipstep)):
+            #data_rho.loc[step,1:]=(g_eff[j] / kappa * (1 - data_beta[step])* surface_area)*9e27*1e12/(3.3e-5) /4e33 
+            data_rho.loc[step,1:]=np.power((g_eff[j] / kappa * (1 - data_beta[step])* surface_area)*9e27*1e12/(3.3e-5) /(5.6e-5),1/4) 
+            j+=1
+
     elif(value=='E_kin'):
         valid_components={'total', 'phi', 'theta', 'all'}
         if kinetic_component not in valid_components:
@@ -598,15 +641,15 @@ def integrated_plot(value:str, path:str='results/', kinetic_component:str='total
             series[key]=np.sum(kinetic_fields[key]*surface_areas[None,:], axis=1)
             np.save(path+f"Kinetic energy ({key}) [erg]", np.column_stack((t*3.3e-5,series[key])))
 
-        plt.plot(t*3.3e-5,series['total'], label='total')
-        plt.plot(t*3.3e-5,series['theta'], label='theta')
-        plt.plot(t*3.3e-5,series['phi'], label='phi')
-        plt.xlabel("t,s")
-        plt.ylabel("Total Kinetic energy [erg]")
-        plt.legend()
-        plt.savefig('plots/1integ_e_kin_split.png', bbox_inches='tight',dpi=300)
-        plt.clf()
-        plt.close()
+        fig, ax = plt.subplots(figsize=fig_size)
+        ax.plot(t*3.3e-5,series['total'], label='total')
+        ax.plot(t*3.3e-5,series['theta'], label='theta')
+        ax.plot(t*3.3e-5,series['phi'], label='phi')
+        ax.set_xlabel("t,s")
+        ax.set_ylabel("Total Kinetic energy [erg]")
+        ax.legend()
+        fig.savefig('plots/1integ_e_kin_split.png', dpi=300)
+        plt.close(fig)
     elif(value=='omega'):
         plot_data=[]
         for step in tqdm(range(maxstep)):
@@ -614,262 +657,54 @@ def integrated_plot(value:str, path:str='results/', kinetic_component:str='total
                 plot_data.append(np.mean(np.array(data_rho.loc[step,1:]/data_rho.loc[0,1:])))
             else:
                 plot_data.append(np.mean(np.array(data_rho.loc[step,1:])))
-        plt.plot(t*3.3e-5,plot_data)
-        plt.xlabel("t,s")
-        plt.ylabel("Total "+label_pr)
-        plt.savefig('plots/integ_plot_'+label_pr+'.png', bbox_inches='tight',dpi=300)
+        plot_data=np.array(plot_data)
+        fig, ax = plt.subplots(figsize=fig_size)
+        ax.plot(t*3.3e-5,plot_data/(3.3e-5*2*np.pi), color='tab:blue')
+        ax.set_xlabel("t,s")
+        ax.set_ylabel(r"Total $\nu_z$, Hz")
+        fig.savefig('plots/integ_plot_'+label_pr+'.png', dpi=300)
         print('plots/integ_plot_'+label_pr+'.png')
-        plt.clf()
-        plt.close()
+        plt.close(fig)
+    elif(value=='L'):
+        plot_data=[]
+        for step in tqdm(range(maxstep)):
+            if(relative and value!='E_kin'):
+                plot_data.append(np.mean(np.array(data_rho.loc[step,1:]/data_rho.loc[0,1:])))
+            else:
+                plot_data.append(np.mean(np.array(data_rho.loc[step,1:])))
+        plot_data=np.array(plot_data)
+        fig, ax = plt.subplots(figsize=fig_size)
+        ax.scatter(t*3.3e-5,plot_data, color='tab:blue')
+        ax.set_xlabel("t,s")
+        ax.set_ylabel(r"Mean T [K]")
+        fig.savefig('plots/integ_plot_'+label_pr+'.png', dpi=300)
+        print('plots/integ_plot_'+label_pr+'.png')
+        plt.close(fig)
     else:
         plot_data=[]
         for step in tqdm(range(maxstep)):
             if(relative and value!='E_kin'):
-                plot_data.append(np.sum(np.array(data_rho.loc[step,1:])*surface_areas/(4*np.pi)))
+                plot_data.append(np.sum(np.array(data_rho.loc[step,1:])*surface_areas))
             else:
-                plot_data.append(np.sum(np.array(data_rho.loc[step,1:])*surface_areas/(4*np.pi)))
+                plot_data.append(np.sum(np.array(data_rho.loc[step,1:])*surface_areas))
 
         plot_data=np.array(plot_data)
 
         np.save(path+label_pr, np.column_stack((t*3.3e-5,plot_data)))
 
-        plt.plot(t*3.3e-5,plot_data)
-        plt.xlabel("t,s")
-        plt.ylabel("Total "+label_pr)
-        plt.savefig('plots/integ_plot_'+label_pr+'.png', bbox_inches='tight',dpi=300)
+        fig, ax = plt.subplots(figsize=fig_size)
+        ax.plot(t*3.3e-5,plot_data, color='tab:red')
+        ax.set_xlabel("t,s")
+        ax.set_ylabel("Total "+label_pr)
+        fig.savefig('plots/integ_plot_'+label_pr+'.png', dpi=300, bbox_inches='tight')
         print('plots/integ_plot_'+label_pr+'.png')
-        plt.clf()
-        plt.close()
+        plt.close(fig)
 
 
-integrated_plot('p', path="plots/res26_1HR/", kinetic_component='all', relative=False)
+#integrated_plot('E', path="plots/res26_full/", kinetic_component='all', relative=False)
 
 
 
-
-
-
-def vel_plot( remove_avg_omega:bool=False):
-    gam=1.25
-
-    #turn_angle=np.pi/2
-
-    turn_angle=0
-
-    path_to_res='plots/article_sim_mk2/'
-    #path_to_res='plots/article plots updated/'
-    #path_to_res='results/'
-    #path_to_res='plots/big_quad_next/'
-    #path_to_res='plots/big_sim/'
-    #path_to_res='plots/0.4c crashes/time series/'
-    
-
-    data_full=pd.read_table(path_to_res+'final_state.dat', header=None, delimiter=r"\s+")
-    data_faces=pd.read_table(path_to_res+'faces.dat', header=None, delimiter=r"\s+", names=['col' + str(x) for x in range(6) ])
-    face_centers=pd.read_table(path_to_res+'face_centers.dat', header=None, delimiter=r"\s+")
-    data=pd.read_table(path_to_res+'vertices.dat', header=None, delimiter=r"\s+")
-    vertices=np.array(data.loc[:,:])
-    faces=np.array(data_faces.loc[:,:])
-
-    vel=[]
-    p=[]
-
-
-    turn_matrix=np.matrix([[np.cos(turn_angle),0, np.sin(turn_angle)],[0,1,0],[-np.sin(turn_angle),0, np.cos(turn_angle)]])
-
-
-    for num, el in enumerate(data_full.loc[:,4]):
-        l=np.array([data_full.loc[num,1],data_full.loc[num,2],data_full.loc[num,3]])
-        R=np.array(face_centers.loc[num])
-        vel.append(np.cross(R,l)/(-np.linalg.norm(R)*data_full.loc[num,0]))
-        p.append(data_full.loc[num,0])
-        #p.append((data_full.loc[num,4]-data_full.loc[num,0]/2 * np.linalg.norm(vel[num])**2)*(gam-1))
-
-
-    for ver_num, vertice in enumerate(vertices):
-        vertices[ver_num]=np.matmul(turn_matrix,vertices[ver_num])
-
-    #for face_num, face in enumerate(faces):
-    #    faces[face_num]=np.matmul(turn_matrix,faces[face_num])
-
-
-    faces_new=[]
-
-    for face_num, face in enumerate(faces): #trick for variable length of each face (needed for hex meshes)
-        faces_new.append(face[~np.isnan(face)].astype(int))
-
-    faces=faces_new
-
-
-    theta=-np.arccos(vertices[:,2])+np.pi/2
-    phi=np.arctan2(vertices[:,1],vertices[:,0])
-
-
-    x_plot=phi/(np.sqrt(2)) #projection
-    y_plot=np.sqrt(2)*np.sin(theta)
-
-    x_plot_full=[]
-    y_plot_full=[]
-
-
-    for face in faces:
-        temp_x=[]
-        temp_y=[]
-        for face_el in face:
-            temp_x.append(x_plot[face_el])
-            temp_y.append(y_plot[face_el])
-        x_plot_full.append(temp_x)
-        y_plot_full.append(temp_y)
-
-
-    vel=np.array(vel)
-
-    for vel_num, ve in enumerate(vel):
-            vel[vel_num]=np.matmul(turn_matrix,vel[vel_num])
-
-    face_centers=np.array(face_centers)
-
-    for face_cent_num, face_cent in enumerate(face_centers):
-            face_centers[face_cent_num]=np.matmul(turn_matrix,face_centers[face_cent_num])
-
-
-
-    theta_fc=np.arccos(face_centers[:,2]/np.linalg.norm(face_centers, axis=1))
-    phi_fc=np.arctan2(face_centers[:,1]/np.linalg.norm(face_centers, axis=1),
-                    face_centers[:,0]/np.linalg.norm(face_centers, axis=1))
-    
-    #==============================================================
-    # omega_z=np.cross(face_centers,vel)[:,2]/np.sin(theta_fc)**2
-
-    # mask_here=np.logical_and(theta_fc>0.05, theta_fc<np.pi-0.05)
-
-    # bins=np.linspace(0.1,np.pi-0.1,200)
-    # digitized = np.digitize(theta_fc, bins)
-    # digitized_masks=[]
-    # for i in range(len(bins)):
-    #     digitized_masks.append(digitized == i)
-
-
-    # bin_omegas=[np.median(omega_z[digitized_masks[i]]) for i in range(len(bins))]      
-    # bin_omegas=np.array(bin_omegas)
-
-
-    # plt.plot(bins, bin_omegas/(3.3e-5*2*np.pi))
-    # #plt.scatter(theta_fc[mask_here], omega_z[mask_here]/(3.3e-5*2*np.pi))
-    # plt.ylabel(r'Freq, Hz')
-    # plt.xlabel(r'$\theta$')
-    # plt.savefig('plots/omegas.png', bbox_inches='tight',dpi=250)
-    # plt.clf()
-    #==============================================================
-
-
-
-    x_fc=phi_fc/np.sqrt(2)
-    y_fc=np.sin(-theta_fc+np.pi/2)*np.sqrt(2)
-
-    for face_num,face in enumerate(faces): #fix x
-        sign_arr=np.sign(x_plot_full[face_num])
-        if( (not (0 in sign_arr)) and (1 in sign_arr) and (-1 in sign_arr) and (np.min(np.abs(x_plot_full[face_num])) > 1)):
-            for i,element in enumerate(x_plot_full[face_num]):
-                if(element < 0):
-                    x_plot_full[face_num][i]+=2*np.pi/np.sqrt(2)
-            #x_fc[face_num]+=2*np.pi/np.sqrt(2)
-
-        
-    patches=[]
-    for face_num,face in enumerate(faces):
-        polygon = Polygon(np.vstack([x_plot_full[face_num], y_plot_full[face_num]]).T,closed=True)
-        patches.append(polygon)
-
-
-    #rd=np.sin(theta_fc)*np.cos(phi_fc)*vel[:,0]+np.sin(theta_fc)*np.sin(phi_fc)*vel[:,1]+np.cos(theta_fc)*vel[:,2]
-    theta_d=np.cos(theta_fc)*np.cos(phi_fc)*vel[:,0]+np.cos(theta_fc)*np.sin(phi_fc)*vel[:,1]-np.sin(theta_fc)*vel[:,2]
-    phi_d=(-np.sin(phi_fc)*vel[:,0]+np.cos(phi_fc)*vel[:,1])/np.sin(theta_fc)
-
-
-    if(remove_avg_omega):
-        phi_d-=np.average(phi_d)
-
-
-    for num,ph in enumerate(phi_d):
-        if(ph>1e5 or np.isinf(ph)):
-            phi_d[num]=0
-
-
-
-    xd=phi_d/np.sqrt(2)
-    yd=theta_d*np.sqrt(2)*np.cos(theta_fc)
-
-
-    #ax[0].quiver(x_fc[::3], y_fc[::3],xd[::3],yd[::3])
-    X_gr, Y_gr=np.meshgrid(np.linspace(-2.2,2.2, 100),np.linspace(-1.4, 1.4, 100))
-    #X_gr, Y_gr=np.meshgrid(np.linspace(np.min(x_fc),np.max(x_fc), 100),np.linspace(np.min(y_fc),np.max(y_fc), 100))
-
-    mask=np.logical_or(np.isnan(xd, where=False),np.isnan(xd, where=False))
-
-
-    xd_gr=griddata(np.stack([x_fc[mask].T, y_fc[mask].T]).T, xd[mask],(X_gr,Y_gr), method='nearest')
-    yd_gr=griddata(np.stack([x_fc[mask].T, y_fc[mask].T]).T, yd[mask],(X_gr,Y_gr), method='nearest')    
-
-
-
-    colorm = plt.get_cmap('viridis')
-
-   
-
-    min_p=np.min(p)
-    max_p=np.max(p)
-
-    norm = mpl.colors.Normalize(vmin=min_p, vmax=max_p)
-    mpl.rcParams.update({'font.size': 22})
-
-    #rho=(np.array(p-min_p)/(max_p-min_p))
-    collection = PatchCollection(patches)
-    colors=colorm(norm(p))
-
-    colorm2 = plt.get_cmap('inferno')
-    v=np.sqrt(xd_gr**2+yd_gr**2)
-
-    #print(xd_gr,xd_gr)
-    #print(np.min(v),np.max(v))
-    v_min=np.min(v)
-    v_max=np.max(v)
-
-
-    norm2 = mpl.colors.Normalize(vmin=v_min, vmax=v_max)
-
-
-
-
-    fig, ax = plt.subplots(figsize=(18, 10), layout='constrained', nrows=3,height_ratios=[16,1,1])
-
-    plt.subplots_adjust(hspace=10)
-    
-    fig.suptitle('t='+"{:10.4f}".format(1.3958)+" s")
-    ax[0].set_xlabel(r'$\varphi / \sqrt{2}$', fontsize=25)
-    ax[0].set_ylabel(r'$\sqrt{2}  \cos(\theta )$', fontsize=25)
-    #for face_num,face in enumerate(faces):
-        #ax[0].fill(x_plot_full[face_num], y_plot_full[face_num],facecolor=colorm(rho[face_num]),edgecolor =colorm(rho[face_num]))
-
-    
-    ax[0].add_collection(collection)
-    collection.set_color(colors)
-    ax[0].set_xlim([-2.5, 3.4])
-    ax[0].set_ylim([-1.5, 1.5])
-    #ax[0].quiver(x_fc[::3], y_fc[::3],xd[::3],yd[::3])
-        #if(face_num % 20 == 0):
-    #for face_num,face in enumerate(faces):
-    #    ax[0].arrow(x_fc[face_num],y_fc[face_num],1e-1*xd[face_num],1e-1*yd[face_num],width=0.007, color='grey', alpha=0.9)
-
-    #ax[0].streamplot(X_gr,Y_gr,xd_gr,yd_gr,color=np.sqrt(xd_gr*2*+yd_gr**2), arrowsize=3)
-
-    ax[0].streamplot(X_gr,Y_gr,xd_gr,yd_gr,color=v,norm=norm2, cmap=colorm2, arrowsize=2,density = 1.7)
-    fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colorm),cax=ax[1], orientation='horizontal', label=r'$\Sigma$, $10^7 \rm g \ \rm cm^{-2}$ ')
-    #fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colorm),cax=ax[1], orientation='horizontal', label=r'Speed, c ')
-    fig.colorbar(mpl.cm.ScalarMappable(norm=norm2, cmap=colorm2),cax=ax[2], orientation='horizontal', label=r"v/c")
-    fig.savefig('plots/vel_plot.png', bbox_inches='tight',dpi=150)
-    plt.clf()
-    plt.close()
 
 
 
@@ -878,7 +713,7 @@ def butterfly_diagram(value:str, path:str='results/', min:float=None, max:float=
         total_steps=int(1e10)
 
     gam=1.25
-
+    plt.rcParams.update({'font.size': 20})
     face_centers=pd.read_table(path+'face_centers.dat', header=None, delimiter=r"\s+")
     face_centers=np.array(face_centers)/(np.array([np.linalg.norm(np.array(face_centers), axis=1),
         np.linalg.norm(np.array(face_centers), axis=1),np.linalg.norm(np.array(face_centers), axis=1)]).T)
@@ -929,10 +764,10 @@ def butterfly_diagram(value:str, path:str='results/', min:float=None, max:float=
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
         data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
         data_beta=pd.read_table(path+'beta.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
-        label_pr='Entropy'
+        label_pr='Entropy [rel. units]'
         data_rho.loc[:,1:]=data_p.loc[:,1:]/(data_rho.loc[:,1:]**  ( (10-3*data_beta.loc[:,1:])/(8-3*data_beta.loc[:,1:]) )   )
     elif(value=='vel_abs'):
-        label_pr='Speed'
+        label_pr='Speed [c]'
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
         data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
         data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
@@ -1026,7 +861,7 @@ def butterfly_diagram(value:str, path:str='results/', min:float=None, max:float=
     
     ax.set_xlabel('Time [s]', fontsize=20)
     ax.set_ylabel(r'Latitude $\theta$ [rad]', fontsize=20)
-    ax.set_title(f'Butterfly Diagram - {label_pr}', fontsize=22)
+    #ax.set_title(f'Butterfly Diagram - {label_pr}', fontsize=22)
     ax.set_ylim([-np.pi/2, np.pi/2])
 
     data_ts=pd.read_table(path+'lightcurve0.dat', header=None, delimiter=r"\s+", skiprows=skiprows)
@@ -1043,7 +878,9 @@ def butterfly_diagram(value:str, path:str='results/', min:float=None, max:float=
     plt.close()
 
 
-butterfly_diagram('rho', path='plots/res26_3alpha2e4/', min=None, max=None, skipstep=100, log=True, skiprows=0, total_steps=0, tilt_angle=0.1, n_bins=100)
+#butterfly_diagram('entropy', path='plots/res26_full/', min=None, max=None, skipstep=100, log=False, skiprows=0, total_steps=0, tilt_angle=0.1, n_bins=100)
+butterfly_diagram('entropy', path='plots/res26_3alpha2e4/', min=None, max=None, skipstep=100, log=False, skiprows=0, total_steps=0, tilt_angle=0.1, n_bins=100)
+butterfly_diagram('vel_abs', path='plots/res26_3alpha2e4/', min=None, max=None, skipstep=100, log=False, skiprows=0, total_steps=0, tilt_angle=0.1, n_bins=100)
 
 
 def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=0, ylim_max:float=0, binning:bool=False, n_bins:int=50):
@@ -1136,4 +973,4 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
 
 
 
-plot_vs_theta('entropy',path="plots/res26_3alpha2e4/", skipstep=300, ylim_min=0, ylim_max=0, binning=True, n_bins=50)
+# plot_vs_theta('entropy',path="plots/res26_3alpha2e4/", skipstep=300, ylim_min=0, ylim_max=0, binning=True, n_bins=50)
