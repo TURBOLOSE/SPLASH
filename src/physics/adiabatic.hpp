@@ -106,7 +106,7 @@ public:
         double sigma = acc_width / 2.355; // FWHM formula
         double theta;
 
-        for (size_t n_face; n_face < faces.size(); n_face++)
+        for (size_t n_face=0; n_face < faces.size(); n_face++)
         {
 
             theta = std::acos(face_centers[n_face][2] / face_centers[n_face].norm());
