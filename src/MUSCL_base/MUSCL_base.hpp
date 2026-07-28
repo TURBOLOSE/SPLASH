@@ -6,8 +6,8 @@
 #include <array>
 
 //constexpr size_t DIM = 8;
-//constexpr size_t DIM = 6;
-constexpr size_t DIM = 5;
+constexpr size_t DIM = 6;
+//constexpr size_t DIM = 5;
 //constexpr size_t DIM = 4;
 using StateVec = std::array<double, DIM>;
 
@@ -28,6 +28,12 @@ protected:
     bool stop_check = false;
     bool is_sw=false;
     vector3d<double> omega0;
+    double M_unit=1e19; // 1e19 g
+    double t_unit =3.3e-5; // 3.3e-5 s
+    double R_unit=1e6; // 1e6 cm
+    double PI_unit=M_unit/(t_unit*t_unit); // 9e27 g/s^2
+    double v_unit=R_unit/t_unit; // 3e10 cm/s
+    double Sigma_unit=M_unit/(R_unit*R_unit); // 1e7 g/cm^2
 
 
 public:
@@ -230,7 +236,10 @@ public:
 
         size_t nf=this->n_faces();
         dt = dt0;
-        U_temp = U;
+       // U_temp = U;
+
+           // using copy() to copy 1st 3 elements
+        std::copy(U.begin(), U.end(), U_temp.begin());
 
         find_v_max();
 
@@ -375,14 +384,50 @@ public:
             }
 
 
+            // find_U_edges();
+            // find_flux_var();
+            // res2d(dt / 2); // res2d makes U = dt/2*phi(U)
+
+            // for (size_t i = 0; i < nf; i++)
+            // {
+
+            //     for (size_t k = 0; k < DIM; k++) //U=U+dt/2*phi(U)
+            //     {
+            //         U[i][k] += U_temp[i][k];
+            //     }
+
+            //     if (U[i][0] < density_floor)
+            //         U[i][0] = density_floor; // density floor
+            // }
+
+            
+
+            // find_U_edges();
+            // find_flux_var();
+            // res2d(dt); // U=dt*phi( U+dt/2*phi(U))
+
+
+            
+            // for (size_t i = 0; i < nf; i++)
+            // {
+
+            //     for (size_t k = 0; k < DIM; k++) //U=U+dt*phi( U+dt/2*phi(U))
+            //     {
+            //         U[i][k] += U_temp[i][k];
+            //     }
+            //     if (U[i][0] < density_floor)
+            //         U[i][0] = density_floor; // density floor
+            // }
+
+
             find_U_edges();
             find_flux_var();
-            res2d(dt / 2); // res2d makes U = dt/2*phi(U)
+            res2d(dt); // res2d makes U = dt*phi(U)
 
             for (size_t i = 0; i < nf; i++)
             {
 
-                for (size_t k = 0; k < DIM; k++) //U=U+dt/2*phi(U)
+                for (size_t k = 0; k < DIM; k++) //U=U+dt*phi(U)
                 {
                     U[i][k] += U_temp[i][k];
                 }
@@ -391,26 +436,26 @@ public:
                     U[i][0] = density_floor; // density floor
             }
 
+            std::copy(U.begin(), U.end(), U_temp_1.begin());
+
             
 
             find_U_edges();
             find_flux_var();
-            res2d(dt); // U=dt*phi( U+dt/2*phi(U))
+            res2d(dt); // U=dt*phi( U+dt*phi(U))
 
 
             
             for (size_t i = 0; i < nf; i++)
             {
 
-                for (size_t k = 0; k < DIM; k++) //U=U+dt*phi( U+dt/2*phi(U))
+                for (size_t k = 0; k < DIM; k++) //U=U+dt*phi( U+dt*phi(U))
                 {
-                    U[i][k] += U_temp[i][k];
+                    U[i][k] = U[i][k]/2.+U_temp[i][k]/2.+U_temp_1[i][k]/2.; // U=U+1/2*dt*phi(U)+1/2*dt*phi(dt*phi(U))
                 }
                 if (U[i][0] < density_floor)
                     U[i][0] = density_floor; // density floor
             }
-
-
 
 
         }
@@ -566,7 +611,7 @@ private:
         size_t nf=this->n_faces();
 
 
-        double GM = 0.217909;
+        double GM = 2e14/R_unit*pow(t_unit, 2); 
         double g_eff;
         double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
         double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
@@ -841,10 +886,11 @@ private:
 
     double pressure_fc(StateVec &u, int n_face) // u[4] == energy
     {                   
-        double GM = 0.217909; 
+        double GM = 2e14/R_unit*pow(t_unit, 2); 
+
         if(is_sw)
         {
-            return GM*u[0]*u[0]/2*1e5;
+            return GM*u[0]*u[0]/2;
         }
 
         if(DIM==4 || (DIM==5 && nuclear_burning_on)){

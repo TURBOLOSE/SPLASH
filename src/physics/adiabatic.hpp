@@ -190,8 +190,13 @@ public:
             vel = cross_product(face_centers[n_face] / face_centers[n_face].norm(), l_vec);
             vel /= (-U[n_face][0]);
 
+            pres=0;
             pres = pressure(U[n_face], vel, face_centers[n_face]);
+
             outfile_p << pres << " ";
+            
+
+
             // outfile_p <<U[n_face][4] << " ";
         }
         outfile_p << "\n";
@@ -377,28 +382,28 @@ public:
                 double m_alpha=6.65e-24; // mass of alpha particle in g
                 double k_b=1.3807e-16; // Boltzmann constant in erg/K
                 double c=3e10; // speed of light in cm/s
-                double a=11e5; //radius in cm
-                double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); //
+                double a=10e5; //radius in cm
+                double g=2e14; 
                 double eps_alpha=1.17e-5; // erg
                 double a0=7.56e-15; //erg/(cm^3 k^4)
                 //double ksb=5.6e-5; // Stefan-Boltzmann constant in erg/(cm^2 s K^4)
                 double Y=U[n_face][5]/U[n_face][0]; // mass fraction of helium
                 
 
-                double y=U[n_face][0]*1e7;
+                double y=U[n_face][0]*Sigma_unit;
 
 
-                double rho5=g*U[n_face][0]*U[n_face][0]*1e14/(gam*PI*9e27)/1e5; // density in 10^5 g/cm^3
+                double rho5=g*U[n_face][0]*U[n_face][0]*Sigma_unit*Sigma_unit/(gam*PI*PI_unit)/1e5; // density in 10^5 g/cm^3
 
 
                 //double T8=m_alpha/k_b * pow(PI *9e27,2)/(g*pow(U[n_face][0]*1e7,3))/1e8; // temperature in 10^8 K
-                double T8=m_alpha/k_b * gam*PI*9e27/(U[n_face][0]*1e7)/1e8; // temperature in 10^8 K
+                double T8=m_alpha/k_b * gam*PI*PI_unit/(U[n_face][0]*1e7)/1e8/3; // temperature in 10^8 K
 
                 //std::cout<<T8<<"\n";
 
                 double Q=a0*c*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
                 //double Q=ksb*c*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
-                double dQ_dt =Q*U[n_face][0]*1e7*2.97e-33; //back to code units * sigma
+                double dQ_dt =Q*U[n_face][0]*pow(t_unit,3)/pow(R_unit, 2); //back to code units * sigma
                 E=dQ_dt;
 
                 // double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
@@ -523,9 +528,8 @@ protected:
         PI = pressure(u_in, vel, edge_center);
 
 
-        double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+        double GM = 2e14/R_unit*pow(t_unit, 2); //g_surf cm/s^2
         double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
-        double H = (2*gam-1)/(gam-1)*PI/(u_in[0]*g_eff);
 
 
         if(mag_field_on){
@@ -545,6 +549,8 @@ protected:
 
     
         if(mag_field_on){
+        double H = gam*PI/(u_in[0]*g_eff);
+
             res[1]=(u_in[1] * ndv - nxR[0] * (PI)+nxB[0]*B.norm()/(8*M_PI*H));
             res[2]=(u_in[2] * ndv - nxR[1] * (PI)+nxB[1]*B.norm()/(8*M_PI*H));
             res[3]=(u_in[3] * ndv - nxR[2] * (PI)+nxB[2]*B.norm()/(8*M_PI*H));
@@ -632,7 +638,7 @@ protected:
 
         double theta_acc = std::acos(fc_normed[1] * std::sin(tilt_angle) + fc_normed[2] * std::cos(tilt_angle));
 
-        double GM = 0.217909;
+        double GM = 2e14/R_unit*pow(t_unit, 2);
         double g_eff = GM - vel.norm() * vel.norm();
         double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
         double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
@@ -684,90 +690,100 @@ protected:
 
         if(non_inertial_rf_on){ //centr + coriolis forces
 
-            /*rxomxomxr=cross_product(fc_normed, omxomxr);
-            res[1] -= u[0]*rxomxomxr[0];
-            res[2] -= u[0]*rxomxomxr[1];
-            res[3] -= u[0]*rxomxomxr[2];*/
-
             rxomxv = cross_product(fc_normed, omxv);
             res[1] = -2*u[0]*rxomxv[0];
             res[2] = -2*u[0]*rxomxv[1];
             res[3] = -2*u[0]*rxomxv[2];
 
+            // omxv=cross_product(fc_normed, vel);
+            // double f0=omega0[2]*std::sqrt(2);
+            // double sign_hs=1;
+            // // if(theta>M_PI/2)
+            // //     sign_hs=-1;
 
-            // const double theta_c=M_PI/4;
-            // const double phi_c=M_PI/4;
-            // const double R0=2./11;
-            // //const double R0=2./5;
-            // //const double R0=0.15;
-            // //const double heatpwr=5e-5;
-            // //const double heatpwr=2e-4;
-            // //const double heatpwr=2e-3;
-            // //const double heatpwr=4e-4;
-            // //const double heatpwr=8e-4;
-
-
-
-            // const double heatpwr=8e-3;
-
-            // //Gaussian heat source for test
-            // double lon=-theta+M_PI/2;
-            // //np.arccos(np.sin(theta_c)*np.sin(lon)+np.cos(lon)*np.cos(theta_c)*np.cos(phi-phi_c))
-            // double r=2*std::acos(std::sin(theta_c)*std::sin(lon)+std::cos(lon)*std::cos(theta_c)*std::cos(phi-phi_c));
+            // double adj_coeff=1;// testing
             
-
+            // res[1] = -2*f0*u[0]*omxv[0]*adj_coeff;
+            // res[2] = -2*f0*u[0]*omxv[1]*adj_coeff;
+            // res[3] = -2*f0*u[0]*omxv[2]*adj_coeff;  
 
 
         }
 
-        if(nuclear_burning_on && DIM==6 ){
+        if(nuclear_burning_on && DIM==6){
             // t< 1000, t<500
             
-            double Q0=5.3e21;
-            double kappa0=0.03; // cm^2/g
-            //double kappa0=0.34; // cm^2/g
+            double Q0=5.3e21; // erg/(g*s)
+            //double kappa0=0.03; // cm^2/g
+            double kappa0=0.34; // cm^2/g
             //double y=1e8; //col depth g/cm^2
             double m_alpha=6.65e-24; // mass of alpha particle in g
             double k_b=1.3807e-16; // Boltzmann constant in erg/K
             double c=3e10; // speed of light in cm/
-            double a=11e5; //radius in cm
-            double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); 
+            double a=1*R_unit; //radius in cm
+            double g=2e14; 
             double eps_alpha=1.16e-5; // erg
             double a0=7.56e-15; //erg/(cm^3 k^4)
             //double ksb=5.6e-5; // Stefan-Boltzmann constant in erg/(cm^2 s K^4)
             double Y=u[5]/u[0]; // mass fraction of helium
+            double GM = 2e14/R_unit*pow(t_unit, 2);
 
-            double y=u[0]*1e7;
-
-
-            double rho5=g*u[0]*u[0]*1e14/(gam_0*u[4]*9e27)/1e5; // density in 10^5 g/cm^3
+            double y=u[0]*Sigma_unit;
 
 
-            double T8=m_alpha/k_b * gam_0*u[4]*9e27/(u[0]*1e7)/1e8 /3; // temperature in 10^8 K       
-            double Q=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8) - a0*c*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
+            double rho5=g*u[0]*u[0]*Sigma_unit* Sigma_unit/(gam_0*u[4]*PI_unit)/1e5; // density in 10^5 g/cm^3
+
+
+            double T8=m_alpha/(3*k_b) * gam_0*u[4]*PI_unit/(u[0]*Sigma_unit)/1e8 ; // temperature in 10^8 K       
+            double Q=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)- a0*c*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
             //double Q=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8) - ksb*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
 
-            res[4]+=Q*u[0]*1e7*2.97e-33; //back to code units * sigma
 
             double sigma_sb=5.6e-5;
-            double T_const_heat=5e6;
-            res[4]+=sigma_sb*pow(T_const_heat,4)/9e27 * 3.3e-5; //const heat bonus
+            double T_const_heat=0;
 
-            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
-           // double kappa = 3.4e6; // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
+            double heat_mult=1;
 
-
-            //res[5]-=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*1e7*2.97e-33*3*m_alpha/eps_alpha*9e20;
-            res[5]-=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*1e7*3*m_alpha/eps_alpha*3.3e-5;
+            heat_mult=1;
+            res[4]+=heat_mult*Q*u[0]*pow(t_unit,3)/pow(R_unit, 2); //back to code units * sigma
+            res[4]+=heat_mult*sigma_sb*pow(T_const_heat,4)/PI_unit * t_unit; //const heat bonus
+            res[5]-=heat_mult*Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*m_alpha/eps_alpha*t_unit;
             
-            
-            en_gain_burning_o+=dt/2.*Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*1e7*2.97e-33*surface_area[n_face];
+            // //simple ver
+            // // double t_nuc=0.3/(3.3e-5);//s to T_unit
+            // // double t_cool=15/(3.3e-5); 
+            // // double heat_mult=10;
+            // // double cool_mult=10;
 
-            en_loss_rad=-dt/2.*a0*c*pow(T8*1e8,4)/(3*kappa0*y*y)*u[0]*1e7*2.97e-33*surface_area[n_face];
-            //en_loss_rad=-dt/2.*ksb*pow(T8*1e8,4)/(3*kappa0*y*y)*u[0]*1e7*2.97e-33*surface_area[n_face];
+            // double t_nuc=0.3/(3.3e-5);//s to T_unit
+            // double t_cool=15/(3.3e-5); 
+            // double heat_mult=1./2;
+            // double cool_mult=1./2;
+
+
+            // if(T8<2){
+            //     heat_mult=0;
+            //     cool_mult=0;
+            // }
+            // if(T8>25)
+            //     heat_mult=0;
+
+            // res[4] +=heat_mult*Y*u[4]/t_nuc*std::pow(T8,2)-u[4]/t_cool*std::pow(T8,4)*cool_mult;
+            // res[5] +=-heat_mult*Y*u[4]/t_nuc*std::pow(T8,2)* 3 * m_alpha / eps_alpha *9e20 * GM*u[0];
+
+
+
+
+
+
+            
+            en_gain_burning_o+=dt/2.*Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*pow(t_unit,3)/pow(R_unit, 2)*surface_area[n_face];
+
+            en_loss_rad=-dt/2.*a0*c*pow(T8*1e8,4)/(3*kappa0*y*y)*u[0]*pow(t_unit,3)/pow(R_unit, 2)*surface_area[n_face];
+            //en_loss_rad=-dt/2.*ksb*pow(T8*1e8,4)/(3*kappa0*y*y)*u[0]*pow(t_unit,3)/pow(R_unit, 2)*surface_area[n_face];
             en_loss_rad_o+=en_loss_rad;
             
-            en_gain_other_o+=dt/2.*sigma_sb*pow(T_const_heat,4)/9e27 * 3.3e-5*surface_area[n_face];
+            en_gain_other_o+=dt/2.*sigma_sb*pow(T_const_heat,4)/PI_unit * t_unit*surface_area[n_face];
 
             //res[5]-= GM / kappa * (1 - beta)*3*m_alpha/eps_alpha*u[0] * 1e19*1e19/(3.3e-5*3.3e-5);
         }
@@ -837,7 +853,7 @@ protected:
 
             // double g_eff=GM;
 
-            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+            double GM = 2e14/R_unit*pow(t_unit, 2);
             double g_eff = GM - vel.norm() * vel.norm();
             double kappa = 3.4e6; // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
 
@@ -851,7 +867,7 @@ protected:
         if (friction_on)
         {
             // IS99 friction
-            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+            double GM = 2e14/R_unit*pow(t_unit, 2);
             double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
             double gam3d = 1 / (2 - gam_0);
             double rho = gam3d / (2 * gam3d - 1) * g_eff * u[0] * u[0] / u[4];
@@ -939,6 +955,7 @@ protected:
             //crutch to avoid high mach
         }
 
+
         return res;
     };
 
@@ -960,7 +977,7 @@ protected:
             vel += cross_product(omega0, r_normed);
         }*/
 
-        double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+        double GM = 2e14/R_unit*pow(t_unit, 2);
         double g_eff = GM - vel.norm() * vel.norm();
         double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
         double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
@@ -1034,7 +1051,7 @@ protected:
             double mu = M_PI / 2;
             double sigma = acc_width / 2.355; // FWHM formula
 
-            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+            double GM = 2e14/R_unit*pow(t_unit, 2);
             double kappa = 3.4e6; // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
 
             size_t nf=this->n_faces();
@@ -1158,36 +1175,41 @@ protected:
                 double m_alpha=6.65e-24; // mass of alpha particle in g
                 double k_b=1.3807e-16; // Boltzmann constant in erg/K
                 double c=3e10; // speed of light in cm/s
-                double a=11e5; //radius in cm
-                double g=0.217909*1e18/(3.3e-5*3.3e-5*a*a); 
+                double a=R_unit; //radius in cm
+                double g=2e14; 
                 double eps_alpha=1.17e-5; // erg
                 double a0=7.56e-15; //erg/(cm^3 k^4)
                 double Y=U[i][5]/U[i][0]; // mass fraction of helium
 
 
                 //double y=1e8; //col depth g/cm^2
-                double y=U[i][0]*1e7;
+                double y=U[i][0]*Sigma_unit;
 
-                double rho5=g*U[i][0]*U[i][0]*1e14/(gam*press*9e27)/1e5; // density in 10^5 g/cm^3
+                double rho5=g*U[i][0]*U[i][0]*Sigma_unit*Sigma_unit/(gam*press*PI_unit)/1e5; // density in 10^5 g/cm^3
 
 
-                double T8=m_alpha/k_b * gam_0*press*9e27/(U[i][0]*1e7)/1e8; // temperature in 10^8 K       
+                double T8=m_alpha/(k_b*3) * gam_0*press*PI_unit/(U[i][0]*Sigma_unit)/1e8; // temperature in 10^8 K       
                 double Q=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8) - a0*c*pow(T8*1e8,4)/(3*kappa0*y*y); //cgs units
 
 
-                double dQ_dt=Q*U[i][0]*1e7*2.97e-33; //back to code units * sigma
+                double dQ_dt=Q*U[i][0]*pow(t_unit,3)/pow(R_unit, 2); //back to code units * sigma
 
-                if (dt_new > std::abs(0.3 * U[i][4] / dQ_dt) )
+                if (dt_new > std::abs(0.3 * U[i][4] / dQ_dt) ){
                     dt_new = 0.3 * std::abs(U[i][4] / dQ_dt);
+                }
 
-                double dY_dt=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*3*m_alpha/eps_alpha*U[i][0]*1e7*2.97e-33*9e20;
+                double dY_dt=Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*3*m_alpha/eps_alpha*U[i][0]*pow(t_unit,3)/pow(R_unit, 2)*v_unit*v_unit; //back to code units * sigma
                 
-                if (dt_new > std::abs(0.3 * U[i][5] / dY_dt) )
+                if (dt_new > std::abs(0.3 * U[i][5] / dY_dt) ){
                     dt_new = 0.3 * std::abs(U[i][5] / dY_dt);
+                }
+
 
             }
             
         }
+
+
         
         //std::cout<<dt_new<<std::endl;
 
@@ -1210,9 +1232,9 @@ protected:
         //double pressure_floor = 1e-16;
         double gam_0 = make_gam(u, r);
                 
-        double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+        double GM = 2e14/R_unit*pow(t_unit, 2);
         double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
-        double H=(2*gam_0-1)/(gam_0-1)*u[4]/(u[0]*g_eff);
+        //double H=gam_0*u[4]/(u[0]*g_eff); //ok wtf and when did that happen? 
 
         /*if(non_inertial_rf_on){
             vel += cross_product(omega0, r/r.norm());
@@ -1230,7 +1252,7 @@ protected:
         // else
         // {
 
-        double res=(u[4] - u[0] * (vel.norm() * vel.norm()) / 2*H) * (gam_0 - 1);
+        double res=(u[4] - u[0] * (vel.norm() * vel.norm()) / 2) * (gam_0 - 1);
 
         if(mag_field_on){
             vector3d<double> B;
@@ -1310,7 +1332,7 @@ protected:
 
 
         if(mag_field_on){
-            double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
+            double GM = 2e14/R_unit*pow(t_unit, 2);
             double g_eff_L = std::max(GM - vel_l.norm() * vel_l.norm(),0.);
             double H_L = (2*gam-1)/(gam_L-1)*p_L/(u_L[0]*g_eff_L);
             double g_eff_R = std::max(GM - vel_r.norm() * vel_r.norm(),0.);
@@ -1425,10 +1447,60 @@ protected:
         }
 
         // std::cout<<to[4]<<" "<<sb[4]<<" "<<res[4]<<"\n";
-        return limiter_third_order(u_r, n_face, n_edge);
+        //return limiter_third_order(u_r, n_face, n_edge);
+       return limiter_venkatakrishnan(u_r, n_face, n_edge);
         // return limiter_superbee(u_r, n_face, n_edge);
         // return res;
     }
+
+    StateVec limiter_venkatakrishnan(StateVec u_r, int n_face, int n_edge)
+        {
+            StateVec sb = limiter_superbee(u_r, n_face, n_edge);
+            vector3d<double> l_vec, vel, edge_center;
+            double c, nu_plus;
+            StateVec res;
+
+            int n_edge_1 = n_edge + 1;
+            if ((n_edge_1) == faces[n_face].size())
+            {
+                n_edge_1 = 0;
+            }
+
+            edge_center = (vertices[faces[n_face][n_edge]] + vertices[faces[n_face][n_edge_1]]) / 2.;
+            edge_center /= edge_center.norm();
+
+            l_vec[0] = U[n_face][1];
+            l_vec[1] = U[n_face][2];
+            l_vec[2] = U[n_face][3];
+
+            vel = cross_product(edge_center, l_vec);
+            vel /= (-U[n_face][0] - rho_an[n_face]) * edge_center.norm();
+
+            double p = U[n_face][4] + p_an[n_face];
+
+            double gam_0 = make_gam(u_r, edge_center);
+
+            c = std::sqrt(gam_0 * p / (U[n_face][0] + rho_an[n_face]));
+
+            nu_plus = (c + dot_product(vel, edge_normals[n_face][n_edge])) * dt *
+                      (distance(vertices[faces[n_face][n_edge]], vertices[faces[n_face][n_edge_1]]) / surface_area[n_face]);
+
+            const double eps = 1e-12 * (1.0 + nu_plus * nu_plus);
+
+            for (size_t i = 0; i < DIM; i++)
+            {
+                double r = std::max(0.0, u_r[i]);
+                double venkat = (r * r + 2.0 * r + 1.0 + eps) / (r * r + r + 2.0 + eps);
+                res[i] = std::max(0.0, std::min(sb[i], venkat));
+
+                if (std::isnan(u_r[i]))
+                {
+                    res[i] = 0;
+                }
+            }
+
+            return res;
+        }
 
     StateVec limiter_third_order(StateVec u_r, int n_face, int n_edge)
     { // here U[4] is also pressure

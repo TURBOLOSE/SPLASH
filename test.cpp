@@ -13,7 +13,7 @@ int main()
 {
     //SurfaceMesh mesh = uv_sphere(65,128);
     //SurfaceMesh mesh = uv_sphere(128,65);
-    //SurfaceMesh mesh = quad_sphere(6);
+    //SurfaceMesh mesh = quad_sphere(5);
     //SurfaceMesh mesh = icosphere(5);
     SurfaceMesh mesh = icosphere_hex(5);
     //SurfaceMesh mesh = uv_sphere_2(128,65);
@@ -99,9 +99,9 @@ int main()
 
     //MUSCL_HLLE test2(mesh, U_in, gam, threads);
     //MUSCL_HLLE_sw test2(mesh, U_in, gam, threads);
-    MUSCL_HLLC_sw test2(mesh, U_in, gam, threads);
+    //MUSCL_HLLC_sw test2(mesh, U_in, gam, threads);
     //MUSCL_HLLE_p test2(mesh, U_in, gam,omega_ns, threads);
-    //MUSCL_HLLC test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
+    MUSCL_HLLC test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
     //MUSCL_HLLCplus test2(mesh, U_in, gam, omega_ns, accretion_on, threads);
     //MUSCL_HLLD test2(mesh, U_in, gam, omega_ns,accretion_on, threads);
 

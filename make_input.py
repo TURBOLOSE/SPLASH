@@ -2195,30 +2195,45 @@ def make_input_6_polar_dense_spot():
     N = len(face_centers)
 
 
+    M_unit=1e19; # 1e19 g
+    t_unit =3.3e-5; # 3.3e-5 s
+    R_unit=1e6; # 1e6 cm
+    PI_unit=M_unit/(t_unit*t_unit); # 9e27 g/s^2
+    v_unit=R_unit/t_unit; # 3e10 cm/s
+    Sigma_unit=M_unit/(R_unit*R_unit); # 1e7 g/cm^2
+
+
     gam0=5./3
     gam=2-1/gam0
     Omega0  = 0.1     # frame rotation
-    #Omega0=0
 
 
-    delta_theta=np.pi/4
-    a=11e5
+    a=1*R_unit
     m_alpha=6.65e-24
     k_b=1.3807e-16
-    g=0.217909*1e18/(3.3e-5*3.3e-5*a*a)
+    g=2e14
 
 
-    T_in=2*1e8#K #physical params (weak cooling?)
-    rho_in=2*1e6 #g/cm^3
+    # T_in=2*1e8#K #physical params 
+    # rho_in=1e7 #g/cm^3
+    # p_fluc=0.95
 
-    a=m_alpha/k_b
+
+
+    a=m_alpha/(3*k_b)
     b=g/gam
+    
+    omega1=np.array([0,0,0])
 
-    omega1=np.array([0,0,0.05])
+    T_in=2*1e8*np.ones(N)+np.random.normal(2*1e8,5e7,N)#K #physical params 
+    rho_in=1e7*np.ones(N) #g/cm^3
+    p_fluc=0.95
 
 
-    rho0=T_in*rho_in/(a*b) /1e7 
-    p0=T_in**2*rho_in/(a**2 *b) /9e27
+
+    rho0=T_in*rho_in/(a*b) /Sigma_unit 
+    p0=T_in**2*rho_in/(a**2 *b) /PI_unit
+    c0=p0/(rho0**gam)
 
     p=np.ones(N)*p0
     rho=np.ones(N)*rho0
@@ -2226,19 +2241,20 @@ def make_input_6_polar_dense_spot():
     v   = np.zeros((N, 3))  
 
     theta = np.arccos(np.clip(face_centers[:, 2], -1, 1))
-    #theta = np.arctan2(face_centers[:, 1], face_centers[:, 2])
 
 
-    p_fluc=0.75
 
-    
 
     for i, R in enumerate(face_centers):
-        th = theta[i]
+        th = theta[i] #colat
 
         # Density profile (applied everywhere for smooth field)
-        p[i]=p0
-        #p[i] = p0*(1.0 + p_fluc * np.tanh(3 - 8 * th))
+        #p[i]=p0
+        p[i] = p0[i]*(1.0 + p_fluc * np.tanh(3 - 15 * th))
+
+        #p[i] = p0*(1.0 + p_fluc * np.tanh(3 - 15 * th))
+        rho[i] = (p[i]/c0[i])**(1/gam)
+
         #p[i] = p0*(1.0 + p_fluc * np.tanh(2 - 2 * th))
 
         f = 2.0 * Omega0 * np.cos(th)   
@@ -2247,23 +2263,37 @@ def make_input_6_polar_dense_spot():
         if abs(f) < 1e-10:
             continue
 
-        dp_dth = -8 * p_fluc / np.cosh(3 - 8 * th)**2
+        dp_dth = -15 * p_fluc / np.cosh(3 - 15 * th)**2
         #dp_dth = -2 * p_fluc / np.cosh(2 - 2 * th)**2
 
-        v_phi_magnitude = np.abs((p0 / (f * rho[i])) * dp_dth)
+        v_phi_magnitude_old = np.abs((p0[i] / (f * rho[i])) * dp_dth)
+        th=np.pi/2-th
+
+
+        if(np.abs(th-np.pi/2)<1e-6):
+            continue
+
+        dp_dth=-dp_dth
+        #v_phi_magnitude = 0
+        #v_phi_magnitude =(2*Omega0*np.sin(th)-np.sqrt(4*Omega0**2*np.sin(th)**2+4*np.tan(th)*p0/(rho[i])*dp_dth))/(2 *np.tan(th)) 
+        #v_phi_magnitude = (2*Omega0*np.sin(th) - np.sqrt(4*Omega0**2*np.sin(th)**2 - 4*np.tan(th)*p0/(rho[i])*dp_dth)) / (2*np.tan(th))
+        v_phi_magnitude = np.abs((p0[i] / (f * rho[i])) * dp_dth)
+
+
+
+        #print(v_phi_magnitude, v_phi_magnitude_old, th)
 
         # Zonal unit vector e_phi = (-sin(phi), cos(phi), 0)
         phi   = np.arctan2(R[1], R[0])
         e_phi = np.array([-np.sin(phi), np.cos(phi), 0.0])
 
-        v_vec = v_phi_magnitude * e_phi
+        v_vec = -v_phi_magnitude * e_phi
         # Angular momentum: l = rho * (R x v), R is unit vector here
 
 
-        # l[i] = rho[i] * np.cross(R, v_vec)
-        # v[i] = v_vec
-        l[i]=rho[i]*np.cross(R,np.cross(omega1,R))/(np.linalg.norm(R)**2)
-        v[i]=np.cross(omega1,R/np.linalg.norm(R))
+        l[i] = rho[i] * np.cross(R, v_vec)
+        v[i] = v_vec
+
 
         # else: l[i] = 0 already (pre-allocated)
 
@@ -2277,12 +2307,18 @@ def make_input_6_polar_dense_spot():
 
     g0=0.217909
 
-    T=m_alpha/k_b * gam* (p*9e27) / ( (rho*1e7))
-    print('mean log10 T:', np.mean(np.log10(T)), ' K')
+
+
+    T=m_alpha/(3*k_b) * gam* (p*9e27) / ( (rho*1e7))
+
+    print("T8 range from", np.min(T)/1e8, "to", np.max(T)/1e8)
+
+    print('mean log 10 Sigma:', np.mean(np.log10(rho*1e7)), ' g/cm^2')
+    #print('mean log10 T:', np.mean(np.log10(T)), ' K')
     print('mean rho:', np.mean(g*rho**2*1e14/(gam*p*9e27)), ' g/cm^3')
-    print('mean h: ', np.mean(gam*p/(rho*g0))*11, 'km')
-    print('mean c_s: ', np.mean(gam*p/rho), 'c')
-    print(f'Estimated Rossby radius  : {np.sqrt(gam*p0/rho0)/(2*Omega0):.4f}')
+    print('mean h: ', np.mean(gam*p/(rho*g0))*11000, 'm')
+    print('mean c_s: ', np.mean(np.sqrt(gam*p/rho)), 'c')
+    print(f'Estimated Rossby radius  : {np.sqrt(gam*p0[0]/rho0[0])/(2*Omega0):.4f}')
 
 
     pd.DataFrame(
@@ -2310,7 +2346,7 @@ def make_input_6_equatorial_hot_spot():
 
 
     delta_theta=np.pi/4
-    a=11e5
+    a=10e5
     m_alpha=6.65e-24
     k_b=1.3807e-16
     g=0.217909*1e18/(3.3e-5*3.3e-5*a*a)
@@ -2333,12 +2369,21 @@ def make_input_6_equatorial_hot_spot():
     # rho_in=5*1e6 #g/cm^3
     # p_fluc=0.8
 
-    T_in=2*1e8#K #physical params 
-    rho_in=1e7 #g/cm^3
-    p_fluc=0.8
+    # T_in=2*1e8#K #physical params 
+    # rho_in=1e7 #g/cm^3
+    # p_fluc=0.5
     
     
 
+    # T_in=2*1e8#K #physical params 
+    # rho_in=1e7 #g/cm^3
+    # p_fluc=0.5
+    
+
+    
+    T_in=2*1e8#K #physical params 
+    rho_in=1e7 #g/cm^3
+    p_fluc=0.95
 
     # T_in=1e9 #K
     # T8=T_in/1e8
@@ -2349,7 +2394,7 @@ def make_input_6_equatorial_hot_spot():
 
 
 
-    a=m_alpha/k_b
+    a=m_alpha/(3*k_b)
     b=g/gam
 
 
@@ -2357,16 +2402,19 @@ def make_input_6_equatorial_hot_spot():
     rho0=T_in*rho_in/(a*b) /1e7 
     p0=T_in**2*rho_in/(a**2 *b) /9e27
 
-
-
     p=np.ones(N)*p0
     rho=np.ones(N)*rho0
     l   = np.zeros((N, 3))  
     v   = np.zeros((N, 3))  
 
+
+
     theta = np.arccos(np.clip(face_centers[:, 2], -1, 1))
     #theta = np.arctan2(face_centers[:, 1], face_centers[:, 2])
-
+    #tilt_angle =0.1
+    tilt_angle =0.0
+    theta_tilt=np.arccos(face_centers[:,1]*np.sin(tilt_angle)+face_centers[:,2]*np.cos(tilt_angle))
+    #double theta_acc = std::acos(fc_normed[1] * std::sin(tilt_angle) + fc_normed[2] * std::cos(tilt_angle));
 
     #p_fluc=0.5
     
@@ -2376,11 +2424,11 @@ def make_input_6_equatorial_hot_spot():
 
     for i, R in enumerate(face_centers):
         th = theta[i]
+        th_t=theta_tilt[i]
 
-        # Density profile (applied everywhere for smooth field)
-        p[i] = p0*(1.0 + p_fluc * np.tanh(3 - 8 * np.abs(np.pi/2-th)))
+        
+        p[i] = p0*(1.0 + p_fluc * np.tanh(3 - 15 * np.abs(np.pi/2-th_t)))
         rho[i] = (p[i]/c0)**(1/gam)
-        #p[i] = p0*(1.0 + p_fluc * np.tanh(2 - 2 * np.abs(np.pi/2-th)))
 
         f = 2.0 * Omega0 * np.cos(th)   
 
@@ -2388,19 +2436,19 @@ def make_input_6_equatorial_hot_spot():
         if abs(f) < 1e-10:
             continue
 
-        dp_dth = 8 *np.sign(np.pi/2-th) * p_fluc / np.cosh(3 - 8 * np.abs(np.pi/2-th))**2
-        #dp_dth = 2 *np.sign(np.pi/2-th) * p_fluc / np.cosh(2 - 2 * np.abs(np.pi/2-th))**2
-        #dp_dth = -2 * p_fluc / np.cosh(2 - 2 * th)**2
 
-        v_phi_magnitude = (p0/ (f * rho[i])) * dp_dth
-        # v_phi < 0 => clockwise => anticyclonic (correct for dense spot)
+        #-2\Sigma
 
-        # Zonal unit vector e_phi = (-sin(phi), cos(phi), 0)
+        dp_dth = -15 *np.sign(np.pi/2-th_t) * p_fluc / np.cosh(3 - 15 * np.abs(np.pi/2-th_t))**2
+        #dp_dth = 2 *np.sign(np.pi/2-th_t) * p_fluc / np.cosh(2 - 2 * np.abs(np.pi/2-th_t))**2
+        #dp_dth = -2 * p_fluc / np.cosh(2 - 2 * th_t)**2
+
+        v_phi_magnitude = (-p0/ (f * rho[i])) * dp_dth
+
         phi   = np.arctan2(R[1], R[0])
         e_phi = np.array([-np.sin(phi), np.cos(phi), 0.0])
 
         v_vec = v_phi_magnitude * e_phi
-        # Angular momentum: l = rho * (R x v), R is unit vector here
         l[i] = rho[i] * np.cross(R, v_vec)
         v[i] = v_vec
 
@@ -2415,11 +2463,18 @@ def make_input_6_equatorial_hot_spot():
     E = 1/(gam-1)*p + rho*np.linalg.norm(v, axis=1)*np.linalg.norm(v, axis=1)/2
 
 
+    # v_out=np.linalg.norm(v, axis=1)
+    # for i,p_el in enumerate(p):
+    #     print(i, v_out[i], p_el)
 
-    T=m_alpha/k_b * gam* (p*9e27) / ( (rho*1e7))
+
+
+    T=m_alpha/(3*k_b) * gam* (p*9e27) / ( (rho*1e7))
+
+    print("T8 range from", np.min(T)/1e8, "to", np.max(T)/1e8)
 
     print('mean log 10 Sigma:', np.mean(np.log10(rho*1e7)), ' g/cm^2')
-    print('mean log10 T:', np.mean(np.log10(T)), ' K')
+    #print('mean log10 T:', np.mean(np.log10(T)), ' K')
     print('mean rho:', np.mean(g*rho**2*1e14/(gam*p*9e27)), ' g/cm^3')
     print('mean h: ', np.mean(gam*p/(rho*g0))*11000, 'm')
     print('mean c_s: ', np.mean(np.sqrt(gam*p/rho)), 'c')
@@ -2467,7 +2522,7 @@ def make_input_6_cos_bell():
     # rho_in=1e6 #g/cm^3
 
 
-    a=m_alpha/k_b
+    a=m_alpha/(3*k_b)
     b=g/gam
 
     rho0=T_in*rho_in/(a*b) /1e7 
@@ -2529,11 +2584,7 @@ def make_input_6_cos_bell():
     pd.DataFrame(data=np.array([rho, l[:,0],l[:,1],l[:,2],E, rho]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
 
 
-def make_input_5N_cos_bell(): 
-
-    rho=1 #in code units, 1 rho_unit = 10 g/cm^3
-    gam0=5/3
-    gam=2-1/gam0
+def make_input_5N_polar_hot_spot(): 
 
 
     face_centers=pd.read_table('results/face_centers.dat', header=None, delimiter=r"\s+")
@@ -2556,49 +2607,82 @@ def make_input_5N_cos_bell():
 
 
 
-    Omega0=0.01
+    Omega0=0.1
+
+    # h0=7e-5 #works (fast spread)
+    # p_fluc=0.6
+
+    # h0=6.2e-5 #works (slower ish spread)
+    # p_fluc=0.16
 
 
-    p_fluc=0.75
+    h0=7e-5 #worksx
+    p_fluc=0.3
 
-    h0=1e-2
-    #h0=1e-6
+    h = h0 * (1.0 + p_fluc * np.tanh(3 - 15 * theta))
+    print('h range: ', np.min(h), ' to ', np.max(h))
+
+
+
+    # Shallow-water pressure p = g h^2 / 2, so geostrophic balance is
+    #   f v_phi = (1/h) dp/dtheta = g dh/dtheta.
+    dh_dtheta = -15 * h0 * p_fluc / np.cosh(3 - 15 * theta)**2
+    dP_dtheta = g0 * h * dh_dtheta
+    f = 2.0 * Omega0 * np.cos(theta)
+    #f=Omega0*np.sqrt(2)
+    v_phi_magnitude = np.zeros(N)
+    valid = np.abs(f) > 1e-10
+
+    v_phi_magnitude[valid] = -dP_dtheta[valid] /(h[valid] * f[valid])
 
 
     for i, R in enumerate(face_centers):
         th = theta[i]
-        
-        h[i] = h0*(1.0 + p_fluc * np.tanh(3 - 8 * th))
-
-        f = 2.0 * Omega0 * np.cos(th)   
-
-        if abs(f) < 1e-10:
-            continue
-
-        dp_dth = -8*h0*h0*rho* g0* p_fluc / np.cosh(3 - 8 * th)**2
-
-        v_phi_magnitude = (1/ (f * h[i])) * dp_dth
 
         phi   = np.arctan2(R[1], R[0])
         e_phi = np.array([-np.sin(phi), np.cos(phi), 0.0])
 
-        v_vec = v_phi_magnitude * e_phi
+        v_vec = v_phi_magnitude[i] * e_phi
         # Angular momentum: l = h * (R x v)
         l[i] = h[i] * np.cross(R, v_vec)
         v[i] = v_vec
 
     
 
-    m_alpha=6.65e-24
-    k_b=1.3807e-16
+    m_alpha=6.65e-24 #g
+    k_b=1.3807e-16 #erg/K
+    g_cgs=0.217909 * 1e18 / (3.3e-5 * 3.3e-5 * 1e12) #cm/s^2
+    c_cgs=3e10 #cm/s
+    kappa0 = 0.03 #cm^2/g
+    Q_0 = 5.3e21 #erg/(g*s)
+    T8_0=m_alpha/(3*k_b) * g_cgs * h0*1e6/1e8 
+    y =5.4e8 #g/cm^2
+    rho5=(y/(h0*1e6))/1e5
+    Y_0=1
+    a0 = 7.56e-15 #erg/cm^3/K^4
+
+    soleq=lambda T8: Q_0*rho5**2*Y_0**3/T8**3*np.exp(-44/T8)-a0*c_cgs*(T8*1e8)**4/(3*kappa0*y**2)
+    T8_eq=fsolve(soleq, 2e9)[0]
+
+    T_dot=Q_0*rho5**2*Y_0**3/T8_0**3*np.exp(-44/T8_0)*m_alpha/k_b
+    t_eq=np.abs(T8_0-T8_eq)*1e8/T_dot
+    
+
+    print('rho_5=', rho5)
+    print('T8_eq=', T8_eq, ', func = ', soleq(T8_eq))
+    print('min T=', (np.min(m_alpha/(3*k_b) * g_cgs * h*1e6))/1e8, '*1e8 K')
+    print('max T=', (np.max(m_alpha/(3*k_b) * g_cgs * h*1e6))/1e8, '*1e8 K')
+    print('t_eq~', t_eq, 's')
     print('v_max=', np.max(np.linalg.norm(v, axis=1)))
     print('c_s=', np.sqrt(g0*h0))
-    print('log T=', np.log10(np.mean(m_alpha/k_b * g0 * h * 9e20/1e2)))
+    print('min h=', np.min(h), 'R')
+    print('t_spread/t_nuc=', np.pi*Omega0/np.mean(np.sqrt(g0*0.0008)))
+    print('t_HD=', np.pi/np.mean(np.sqrt(g0*0.0008))/2*3.3e-5, ' s')
+    print('v_spread=', np.sqrt(g_cgs*np.max(h)*1e6)/(2*Omega0/(3.3e-5)*0.1 * 3e10), ' c')
 
-    theta=np.arccos(face_centers[:,2])
 
-    #pd.DataFrame(data=np.array([h, l[:,0],l[:,1],l[:,2]]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
-    pd.DataFrame(data=np.array([h, l[:,0],l[:,1],l[:,2], h]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
+
+    pd.DataFrame(data=np.array([h, l[:,0],l[:,1],l[:,2], Y_0*h]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
 
 
 
@@ -2629,7 +2713,7 @@ def make_input_5N_equatorial_hot_spot():
 
 
 
-    Omega0=0.5
+    Omega0=0.1
 
 
     #p_fluc=0.75
@@ -2649,30 +2733,30 @@ def make_input_5N_equatorial_hot_spot():
     # h0=2e-4 #first approx
     # p_fluc=0.5
 
-    # h0=6e-5
+    # h0=7e-5 #works
+    # p_fluc=0.4
+
+    # h0=5e-5  #needs better mesh
     # p_fluc=0.6
 
-    # h0=8e-5
-    # p_fluc=0
 
-    h0=7e-5
-    p_fluc=0.4
-
+    h0=7e-5 #works
+    p_fluc=0.6
 
 
 
 
     lat = np.pi / 2 - theta
-    #h = h0 * (1.0 + p_fluc * np.tanh(3 - 8 * np.abs(lat)))
-    h = h0 * (1.0 + p_fluc * np.tanh(3 - 5 * np.abs(lat)))
+    h = h0 * (1.0 + p_fluc * np.tanh(3 - 15 * np.abs(lat)))
 
     print('h range: ', np.min(h), ' to ', np.max(h))
 
     # Shallow-water pressure p = g h^2 / 2, so geostrophic balance is
     #   f v_phi = (1/h) dp/dtheta = g dh/dtheta.
-    dh_dtheta = 8*np.sign(lat) * h0 * p_fluc / np.cosh(3 - 8 * np.abs(lat))**2
+    dh_dtheta = 15*np.sign(lat) * h0 * p_fluc / np.cosh(3 - 15 * np.abs(lat))**2
     dP_dtheta = g0 * h * dh_dtheta
     f = 2.0 * Omega0 * np.cos(theta)
+    #f=Omega0*np.sqrt(2)
     v_phi_magnitude = np.zeros(N)
     valid = np.abs(f) > 1e-10
     v_phi_magnitude[valid] = dP_dtheta[valid] /(h[valid] * f[valid])
@@ -2722,8 +2806,11 @@ def make_input_5N_equatorial_hot_spot():
     print('v_max=', np.max(np.linalg.norm(v, axis=1)))
     print('c_s=', np.sqrt(g0*h0))
     print('min h=', np.min(h), 'R')
+    print('t_spread/t_nuc=', np.pi*Omega0/np.mean(np.sqrt(g0*0.0008)))
+    print('t_HD=', np.pi/np.mean(np.sqrt(g0*0.0008))/2*3.3e-5, ' s')
+    print('v_spread=', np.sqrt(g_cgs*np.max(h)*1e6)/(2*Omega0/(3.3e-5)*0.1 * 3e10), ' c')
 
-    theta=np.arccos(face_centers[:,2])
+
 
     pd.DataFrame(data=np.array([h, l[:,0],l[:,1],l[:,2], Y_0*h]).transpose()).to_csv('input/input.dat',index=False, sep=' ', header=False)
 
@@ -2751,10 +2838,12 @@ def make_input_5N_equatorial_hot_spot():
 #make_input_5_polar_dense_spot()
 
 #make_input_6_equatorial_hot_spot()
-#make_input_6_polar_dense_spot()
+make_input_6_polar_dense_spot()
 #make_input_6_cos_bell()
-#make_input_5N_cos_bell()
-make_input_5N_equatorial_hot_spot()
+
+
+#make_input_5N_polar_hot_spot()
+#make_input_5N_equatorial_hot_spot()
 
 
 #make_input_4_cyclone(omega_cyclone=-0.05)
