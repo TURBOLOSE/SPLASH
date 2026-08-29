@@ -2225,7 +2225,7 @@ def make_input_6_polar_dense_spot():
     
     omega1=np.array([0,0,0])
 
-    T_in=2*1e8*np.ones(N)+np.random.normal(2*1e8,5e7,N)#K #physical params 
+    T_in=2*1e8*np.ones(N)#+np.random.normal(2*1e8,5e7,N)#K #physical params 
     rho_in=1e7*np.ones(N) #g/cm^3
     p_fluc=0.95
 
@@ -2250,10 +2250,21 @@ def make_input_6_polar_dense_spot():
 
         # Density profile (applied everywhere for smooth field)
         #p[i]=p0
+
+
+        # p[i] = p0[i]*(1.0 + p_fluc * np.tanh(3 - 15 * th))
+        rho[i]= rho0[i]
+
+
         p[i] = p0[i]*(1.0 + p_fluc * np.tanh(3 - 15 * th))
+        
+       #rho[i]= rho0[i]*(1.0 + p_fluc * np.tanh(3 - 15 * th)) #bump
+        #rho[i] = rho0[i]*(1.0 + p_fluc * np.tanh(15 * th - 3)) #hole
+        #rho[i] = (p[i]/c0[i])**(1/gam)
+
+
 
         #p[i] = p0*(1.0 + p_fluc * np.tanh(3 - 15 * th))
-        rho[i] = (p[i]/c0[i])**(1/gam)
 
         #p[i] = p0*(1.0 + p_fluc * np.tanh(2 - 2 * th))
 
@@ -2266,7 +2277,7 @@ def make_input_6_polar_dense_spot():
         dp_dth = -15 * p_fluc / np.cosh(3 - 15 * th)**2
         #dp_dth = -2 * p_fluc / np.cosh(2 - 2 * th)**2
 
-        v_phi_magnitude_old = np.abs((p0[i] / (f * rho[i])) * dp_dth)
+        v_phi_magnitude_old = (p0[i] / (f * rho[i]) * dp_dth)
         th=np.pi/2-th
 
 
@@ -2380,9 +2391,8 @@ def make_input_6_equatorial_hot_spot():
     # p_fluc=0.5
     
 
-    
-    T_in=2*1e8#K #physical params 
-    rho_in=1e7 #g/cm^3
+    T_in=2*1e8*np.ones(N)#+np.random.normal(2*1e8,5e7,N)#K #physical params 
+    rho_in=1e7*np.ones(N) #g/cm^3
     p_fluc=0.95
 
     # T_in=1e9 #K
@@ -2420,15 +2430,25 @@ def make_input_6_equatorial_hot_spot():
     
 
     c0=p0/(rho0**gam)
-    
+
+
+    rho_fluc=0
 
     for i, R in enumerate(face_centers):
         th = theta[i]
         th_t=theta_tilt[i]
 
-        
-        p[i] = p0*(1.0 + p_fluc * np.tanh(3 - 15 * np.abs(np.pi/2-th_t)))
-        rho[i] = (p[i]/c0)**(1/gam)
+       # p[i] = p0[i]*(1.0 + p_fluc * np.tanh(3 - 15 * np.abs(np.pi/2-th_t)))
+       # rho[i] = (p[i]/c0[i])**(1/gam)
+
+
+        #p[i] = p0[i]*(1.0 + p_fluc *  np.tanh(3 - 15 * np.abs(np.pi/2-th_t))) #bump
+        #rho[i] = rho0[i]*(1.0 + p_fluc *  np.tanh(15 * np.abs(np.pi/2-th_t)-3)) #hole
+        p[i] = p0[i]*(1.0 + p_fluc *  np.tanh(4 - 5 * np.abs(np.pi/2-th_t))) #bump
+
+        rho_fluc=0
+        rho[i] = rho0[i]*(1.0 + rho_fluc *  np.tanh(5 * np.abs(np.pi/2-th_t)-4)) #hole
+
 
         f = 2.0 * Omega0 * np.cos(th)   
 
@@ -2439,18 +2459,19 @@ def make_input_6_equatorial_hot_spot():
 
         #-2\Sigma
 
-        dp_dth = -15 *np.sign(np.pi/2-th_t) * p_fluc / np.cosh(3 - 15 * np.abs(np.pi/2-th_t))**2
-        #dp_dth = 2 *np.sign(np.pi/2-th_t) * p_fluc / np.cosh(2 - 2 * np.abs(np.pi/2-th_t))**2
+        #dp_dth = -15 *np.sign(np.pi/2-th_t) * p_fluc / np.cosh(3 - 15 * np.abs(np.pi/2-th_t))**2
+        dp_dth = -5 *np.sign(np.pi/2-th_t) * p_fluc / np.cosh(4 - 5 * np.abs(np.pi/2-th_t))**2
         #dp_dth = -2 * p_fluc / np.cosh(2 - 2 * th_t)**2
 
-        v_phi_magnitude = (-p0/ (f * rho[i])) * dp_dth
+        #v_phi_magnitude = (-p0/ (f * rho[i])) * dp_dth
+        v_phi_magnitude = (p0[i] / (f * rho[i]) * dp_dth)
 
         phi   = np.arctan2(R[1], R[0])
         e_phi = np.array([-np.sin(phi), np.cos(phi), 0.0])
 
         v_vec = v_phi_magnitude * e_phi
         l[i] = rho[i] * np.cross(R, v_vec)
-        v[i] = v_vec
+        v[i] = v_vec 
 
         # else: l[i] = 0 already (pre-allocated)
 
@@ -2478,7 +2499,7 @@ def make_input_6_equatorial_hot_spot():
     print('mean rho:', np.mean(g*rho**2*1e14/(gam*p*9e27)), ' g/cm^3')
     print('mean h: ', np.mean(gam*p/(rho*g0))*11000, 'm')
     print('mean c_s: ', np.mean(np.sqrt(gam*p/rho)), 'c')
-    print(f'Estimated Rossby radius  : {np.sqrt(gam*p0/rho0)/(2*Omega0):.4f}')
+    #print(f'Estimated Rossby radius  : {np.sqrt(gam*p0/rho0)/(2*Omega0):.4f}')
 
 
     pd.DataFrame(

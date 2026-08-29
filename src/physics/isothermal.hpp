@@ -21,36 +21,36 @@ public:
             stop_check = true;
         }
 
-        outfile.open("results/rho.dat", std::ios::out | std::ios::trunc);
+        outfile.open(output_path + "rho.dat", std::ios::out | std::ios::trunc);
         outfile.close();
-        outfile.open("results/rho.dat", std::ios::out | std::ios::app);
+        outfile.open(output_path + "rho.dat", std::ios::out | std::ios::app);
 
-        outfile_curl.open("results/curl.dat", std::ios::out | std::ios::trunc);
+        outfile_curl.open(output_path + "curl.dat", std::ios::out | std::ios::trunc);
         outfile_curl.close();
-        outfile_curl.open("results/curl.dat", std::ios::out | std::ios::app);
+        outfile_curl.open(output_path + "curl.dat", std::ios::out | std::ios::app);
 
-        outfile_p.open("results/p.dat", std::ios::out | std::ios::trunc);
+        outfile_p.open(output_path + "p.dat", std::ios::out | std::ios::trunc);
         outfile_p.close();
-        outfile_p.open("results/p.dat", std::ios::out | std::ios::app);
+        outfile_p.open(output_path + "p.dat", std::ios::out | std::ios::app);
 
-        outfile_omega.open("results/omega.dat", std::ios::out | std::ios::trunc);
+        outfile_omega.open(output_path + "omega.dat", std::ios::out | std::ios::trunc);
         outfile_omega.close();
-        outfile_omega.open("results/omega.dat", std::ios::out | std::ios::app);
+        outfile_omega.open(output_path + "omega.dat", std::ios::out | std::ios::app);
 
-        std::string adrs[] = {"results/Lx.dat", "results/Ly.dat", "results/Lz.dat"};
+        std::string adrs[] = {"Lx.dat", "Ly.dat", "Lz.dat"};
 
         for (size_t i=0; i < 3; i++)
         {
-            outfile_l[i].open(adrs[i], std::ios::out | std::ios::trunc);
+            outfile_l[i].open(output_path + adrs[i], std::ios::out | std::ios::trunc);
             outfile_l[i].close();
-            outfile_l[i].open(adrs[i], std::ios::out | std::ios::app);
+            outfile_l[i].open(output_path + adrs[i], std::ios::out | std::ios::app);
         }
 
         if (nuclear_burning_on)
         {
-            outfile_Y.open("results/Y.dat", std::ios::out | std::ios::trunc);
+            outfile_Y.open(output_path + "Y.dat", std::ios::out | std::ios::trunc);
             outfile_Y.close();
-            outfile_Y.open("results/Y.dat", std::ios::out | std::ios::app);
+            outfile_Y.open(output_path + "Y.dat", std::ios::out | std::ios::app);
         }
 
     }

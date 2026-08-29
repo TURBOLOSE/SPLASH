@@ -34,7 +34,7 @@ protected:
     double PI_unit=M_unit/(t_unit*t_unit); // 9e27 g/s^2
     double v_unit=R_unit/t_unit; // 3e10 cm/s
     double Sigma_unit=M_unit/(R_unit*R_unit); // 1e7 g/cm^2
-
+    std::string output_path="output/";
 
 public:
     MUSCL_base(SurfaceMesh mesh, std::vector<StateVec> U_in, double gam, double omega_ns_i, size_t threads_i) : MUSCL_base_geometry(mesh), U(U_in), gam(gam), omega_ns(omega_ns_i), threads(threads_i)
@@ -95,6 +95,8 @@ public:
         omega_ns = parameters["omega_ns"];
         nuclear_burning_on = parameters["nuclear_burning_on"];
         oned_testing_mode = parameters["oned_testing_mode"];
+        output_path = parameters["output_path"];
+
 
         std::vector<double> main_faces_thetas;
 

@@ -1,5 +1,3 @@
-from weakref import ref
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -99,6 +97,17 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
         k_b=1.3807e-16
         data_rho.loc[:,1:]=m_alpha/(3*k_b) * gam * (data_p.loc[:,1:]*9.0e27)/ ( (data_rho.loc[:,1:]*1.0e7))
         data_rho.loc[:,:]=data_rho.loc[:,:].astype(float)
+    elif(value=='R_rossby'):
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        data_rho.loc[:,:]=data_rho.loc[:,:].astype(float)
+        data_p.loc[:,:]=data_p.loc[:,:].astype(float)
+        label_pr=r'$R_{ns}$'
+        omega=0.1
+        stfc=np.sin(theta_fc)
+        mask=np.logical_or(theta_fc<1e-1,theta_fc>np.pi-1e-1)
+        stfc[mask]=1e-1
+        data_rho.loc[:,1:]=np.sqrt(1.4*data_p.loc[:,1:]/(data_rho.loc[:,1:])) / (2*omega*stfc)
     elif(value=='T_sw'):
         data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
         label_pr=r'$T[k]$ '
@@ -188,7 +197,20 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
             GM=0.217909
             g_eff=-v**2+GM
             data_rho.loc[i,1:]=gam*data_p.loc[i,1:]/(g_eff*rho0)*1e6
-
+    elif(value=='L_xrb'):
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        data_rho.loc[:,:]=data_rho.loc[:,:].astype(float)
+        data_p.loc[:,:]=data_p.loc[:,:].astype(float)
+        rho=data_rho.loc[:,1:]*1e7
+        label_pr='L [erg/s]'
+        m_alpha=6.65e-24/3
+        k_b=1.3807e-16
+        kappa=0.34
+        a0=7.56e-15
+        c=3e10
+        T=m_alpha/k_b * 1.25 * (data_p.loc[:,1:]*9.0e27)/ ( (data_rho.loc[:,1:]*1.0e7))
+        data_rho.loc[:,1:]=a0*c*T**4/(kappa*rho)
     else:
         print("wrong type of plot value")
         return
@@ -519,11 +541,11 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
 
 
 
-# projection_plots('T', path='results/', min=None, max=None,skipstep=1,remove_avg_omega=False, print_residuals=False, 
+# projection_plots('L_xrb', path='/scratch/gpfs/ar3260/results_extra/xbr_eq_long/', min=None, max=None,skipstep=50,remove_avg_omega=False, print_residuals=False, 
 #               log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, minv=0, maxv=0.004, normalized=False, projection='Mercator', tilt_angle=0)#0.0015)
 
-# projection_plots('rho', path='results/', min=None, max=None,skipstep=1,remove_avg_omega=False, print_residuals=False, 
-#               log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, minv=0, maxv=0.002, normalized=False, projection='Gall-Peters', tilt_angle=0)#0.0015)
+projection_plots('rho', path='results/', min=None, max=None,skipstep=10,remove_avg_omega=False, print_residuals=False, 
+              log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, minv=0, maxv=0.002, normalized=False, projection='Mercator', tilt_angle=0)#0.0015)
 
 # data_rho_c=pd.read_table("results/isoth_cycl9/"+'curl.dat', header=None, delimiter=r"\s+")
 # data_rho_ac=pd.read_table("results/isoth_ac9/"+'curl.dat', header=None, delimiter=r"\s+")
@@ -555,6 +577,9 @@ def integrated_plot(value):
     elif(value=='Y'):
         data_rho=pd.read_table(path+'Y.dat', header=None, delimiter=r"\s+")
         label_pr='Y'
+    elif(value=='omega'):
+        data_rho=pd.read_table(path+'omega.dat', header=None, delimiter=r"\s+")
+        label_pr='Omega_z'
     elif(value=='T_sw'):
         data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
         label_pr=r'$T_8 [K]$ '
@@ -640,7 +665,7 @@ def integrated_plot(value):
     plt.close()
 
 
-#integrated_plot('Y')
+# integrated_plot('omega')
 
 
 
@@ -713,6 +738,72 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
         rho=data_rho.loc[:,1:]
         omega=0.1
         data_rho.loc[:,1:]=(data_vort.loc[:,1:]+2*omega*np.sin(theta_fc))/rho
+    elif(value=='pot_vort_cr'):
+        data_vort = pd.read_table(path+'curl.dat',
+                                header=None, delimiter=r"\s+")
+        data_rho = pd.read_table(path+'rho.dat',
+                                header=None, delimiter=r"\s+")
+
+        label_pr = r'$d\overline{q}/d\lambda$'
+
+        maxstep = len(data_rho.loc[:, 0])
+        data_rho = data_rho.astype(float)
+
+        omega = 0.1
+
+        # theta_fc is latitude lambda in your function
+        # th_fc is colatitude theta
+        th_fc = np.pi/2 - theta_fc
+
+        pole_cut = 0.03
+        bins = np.linspace(pole_cut, np.pi-pole_cut, 120)
+        bin_centers = 0.5 * (bins[:-1] + bins[1:])
+
+        bin_idx = np.digitize(th_fc, bins) - 1
+        valid = (
+            (th_fc >= bins[0]) &
+            (th_fc < bins[-1]) &
+            (bin_idx >= 0) &
+            (bin_idx < len(bin_centers))
+        )
+
+        counts = np.bincount(
+            bin_idx[valid],
+            minlength=len(bin_centers)
+        ).astype(float)
+
+        nonempty = counts > 0
+
+        res = []
+
+        for i in range(0, maxstep, skipstep):
+
+            lam = np.pi/2 - bin_centers
+
+            sigma = np.asarray(data_rho.loc[i, 1:], dtype=float)
+            zeta  = np.asarray(data_vort.loc[i, 1:], dtype=float)
+            f = 2.0 * omega * np.cos(th_fc)
+
+            q=(zeta + f) / sigma
+            q_sum = np.bincount(
+                bin_idx[valid],
+                weights=q[valid],
+                minlength=len(bin_centers)
+            )
+            q_b = np.full(len(bin_centers), np.nan)
+            q_b[nonempty] = q_sum[nonempty] / counts[nonempty]
+
+
+
+            # meridional PV gradient.
+            # lam is decreasing because bin_centers increases; np.gradient
+            # handles this correctly.
+            dq_dlam = np.gradient(q_b, lam)
+
+            dq_dlam[~nonempty] = np.nan
+            res.append(dq_dlam)
+
+        theta_fc = np.pi/2 - bin_centers
     elif(value=='T'):
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
@@ -734,7 +825,7 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
         data_rho.loc[:,1:]=g*data_rho.loc[:,1:]**2*1e14/(1.25*data_p.loc[:,1:]*9e27)/1e5
         data_rho.loc[:,:]=data_rho.loc[:,:].astype(float)
     elif(value=='vel_abs'):
-        label_pr='Speed'
+        label_pr='|V| [c]'
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
         data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
@@ -754,40 +845,40 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
             data_rho.loc[i,1:]=x
 
     elif(value=='RT_cr'):
-        label_pr=r'g$_{eff} \cdot d \Sigma /d \theta$ [ g cm$^{-1}$ s$^{-2}$ ]'
+        label_pr=r'$g_{\rm eff,\lambda}\, d\overline{\Sigma}/d\lambda$ [g cm$^{-1}$ s$^{-2}$]'
 
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
         data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
         data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
-        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
         maxstep=len(data_rho.loc[:,0])
-        n_faces=len(data_rho.loc[0,:])-1
         data_rho=data_rho.astype(float)
 
+        # Match the solver's unit-radius velocity reconstruction.
+        r_hat = face_centers / np.linalg.norm(face_centers, axis=1, keepdims=True)
         ref = np.array([0.0, 0.0, 1.0])
-        e_phi = np.cross(np.broadcast_to(ref, face_centers.shape), face_centers)
+        e_phi = np.cross(np.broadcast_to(ref, r_hat.shape), r_hat)
         e_phi_norm = np.linalg.norm(e_phi, axis=1)
         near_pole = e_phi_norm < 1e-12
         if np.any(near_pole):
             ref2 = np.array([1.0, 0.0, 0.0])
-            e_phi[near_pole] = np.cross(np.broadcast_to(ref2, face_centers[near_pole].shape), face_centers[near_pole])
+            e_phi[near_pole] = np.cross(np.broadcast_to(ref2, r_hat[near_pole].shape), r_hat[near_pole])
             e_phi_norm[near_pole] = np.linalg.norm(e_phi[near_pole], axis=1)
 
         e_phi = e_phi / e_phi_norm[:, None]
 
         omega=0.1
-        R=10e5
-        g=0.217909*1e18/(3.3e-5*3.3e-5*R*R); 
         th_fc=np.pi/2-theta_fc
 
-        # Bin by theta (mean within each bin)
-        bins=np.linspace(0,np.pi,100)
+        # Average over longitude to form an axisymmetric background.  Exclude
+        # both polar caps; do not clip them into the edge bins.
+        pole_cut = 0.15
+        bins=np.linspace(pole_cut, np.pi-pole_cut, 100)
         bin_centers = 0.5 * (bins[:-1] + bins[1:])
-        eps = 1e-12
-        theta_clipped = np.clip(th_fc, bins[0] + eps, bins[-1] - eps)
-        bin_idx = np.digitize(theta_clipped, bins) - 1
-        valid = (bin_idx >= 0) & (bin_idx < len(bin_centers))
+        bin_idx = np.digitize(th_fc, bins) - 1
+        valid = ((th_fc >= bins[0]) & (th_fc < bins[-1]) &
+                 (bin_idx >= 0) & (bin_idx < len(bin_centers)))
         counts = np.bincount(bin_idx[valid], minlength=len(bin_centers)).astype(float)
         nonempty = counts > 0
 
@@ -795,25 +886,43 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
         for i in range(0,maxstep,skipstep):
             L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
             rho0=data_rho.loc[i,1:]
-            v=np.cross(face_centers,L)/np.array([rho0,rho0,rho0]).T
+            p=data_p.loc[i,1:]
+            v=np.cross(r_hat,L)/np.array([rho0,rho0,rho0]).T
             v_phi = np.einsum('ij,ij->i', v, e_phi)
-            geff=(v_phi**2/np.tan(th_fc)+2*omega*v_phi*np.sin(th_fc))
-            #geff=v_phi**2/np.tan(th_fc)/R*9e20+2*omega*v_phi*np.sin(th_fc)*3e10/(3.3e-5)
-            geff[np.abs(th_fc)<1e-4]=0
-            rho3=g*rho0**2*1e14/(1.25*data_p.loc[i,1:]*9e27)/1e5
-            #data_rho.loc[i,1:]=geff*np.gradient(rho3, th_fc)
-            #data_rho.loc[i,1:]=v_phi
 
             rho0_sum = np.bincount(bin_idx[valid], weights=rho0[valid], minlength=len(bin_centers))
             rho0_binned = np.full_like(bin_centers, np.nan, dtype=float)
             rho0_binned[nonempty] = rho0_sum[nonempty] / counts[nonempty]
 
-            geff_sum = np.bincount(bin_idx[valid], weights=geff[valid], minlength=len(bin_centers))
-            geff_binned = np.full_like(bin_centers, np.nan, dtype=float)
-            geff_binned[nonempty] = geff_sum[nonempty] / counts[nonempty]
+            p_sum = np.bincount(bin_idx[valid], weights=p[valid], minlength=len(bin_centers))
+            p_binned = np.full_like(bin_centers, np.nan, dtype=float)
+            p_binned[nonempty] = p_sum[nonempty] / counts[nonempty]
 
+            v_phi_sum = np.bincount(bin_idx[valid], weights=v_phi[valid], minlength=len(bin_centers))
+            v_phi_binned = np.full_like(bin_centers, np.nan, dtype=float)
+            v_phi_binned[nonempty] = v_phi_sum[nonempty] / counts[nonempty]
 
-            res.append(-geff_binned*np.gradient(rho0_binned, bin_centers)*1e7*3e10/(3.3e-5))
+            # g_eff points northward (increasing latitude), whereas bin_centers
+            # are colatitudes.  Hence d/dlatitude = -d/dcolatitude.
+            geff_binned = (v_phi_binned**2 / np.tan(bin_centers) +
+                           2 * omega * v_phi_binned * np.cos(bin_centers))
+
+            # Avoid allowing a sparse bin to turn neighboring gradients into NaN.
+            rho_for_gradient = rho0_binned.copy()
+            p_for_gradient = p_binned.copy()
+            if np.count_nonzero(nonempty) >= 2:
+                rho_for_gradient[~nonempty] = np.interp(
+                    bin_centers[~nonempty], bin_centers[nonempty], rho0_binned[nonempty])
+                p_for_gradient[~nonempty] = np.interp(
+                    bin_centers[~nonempty], bin_centers[nonempty], p_binned[nonempty])
+                #criterion = -geff_binned * np.gradient(p_for_gradient/rho_for_gradient**1.4, bin_centers)
+                criterion = -geff_binned * np.gradient(rho_for_gradient, bin_centers)
+                criterion[~nonempty] = np.nan
+            else:
+                criterion = np.full_like(bin_centers, np.nan, dtype=float)
+
+            #res.append(criterion * 1e7 * 3e10/(3.3e-5))
+            res.append(criterion * 1e7 * 3e10/(3.3e-5))
             theta_fc=-bin_centers+np.pi/2
 
 
@@ -847,7 +956,7 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
 
 
         # Bin by theta (mean within each bin)
-        bins=np.linspace(0,np.pi,100)
+        bins=np.linspace(0+0.03,np.pi-0.03,200)
         bin_centers = 0.5 * (bins[:-1] + bins[1:])
         eps = 1e-12
         theta_clipped = np.clip(th_fc, bins[0] + eps, bins[-1] - eps)
@@ -862,11 +971,12 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
             v=np.cross(face_centers,L)/np.array([rho0,rho0,rho0]).T
             v_phi = np.einsum('ij,ij->i', v, e_phi)
             #geff=(v_phi**2/np.tan(th_fc)+2*omega*v_phi*np.sin(th_fc)) * 3e10/(3.3e-5)
-            geff=(v_phi**2/np.tan(th_fc)+2*omega*v_phi*np.sin(th_fc))
+            geff=(v_phi**2/np.tan(th_fc)+2*omega*v_phi*np.cos(th_fc))
             geff[np.logical_or(np.abs(th_fc)<1e-4, np.abs(th_fc-np.pi)<1e-4)] = 0
             rho3=g*rho0**2*1e14/(1.4*data_p.loc[i,1:]*9e27)/1e5
             #data_rho.loc[i,1:]=-geff*np.gradient(rho3, th_fc)/(rho3) /(3.3e-5)**2
-            entr=data_p.loc[i,1:]/(rho0**1.4)
+            #entr=data_p.loc[i,1:]/(rho0**1.4)
+            entr=rho0
             nonempty = counts > 0
 
             entr_sum = np.bincount(bin_idx[valid], weights=entr[valid], minlength=len(bin_centers))
@@ -880,17 +990,77 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
             #data_rho.loc[i,1:]=-geff*np.gradient(rho0, th_fc)/(rho0) /(3.3e-5)**2
 
             res.append(-geff_binned*np.gradient(entr_binned, bin_centers)/(entr_binned*1.4) /(3.3e-5)**2)
+            #res.append(geff_binned*3e10/(3.3e-5))
             theta_fc=-bin_centers+np.pi/2
 
 
-    elif(value=='Fr'):
-       #label_pr=r'Froude number'
-        label_pr=r'Ro'
+    elif(value=='dvphi/dtheta'):
+        label_pr=r'$\frac{\partial v_\phi}{\partial \theta}$, [c]'
         data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
         data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
         data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
         data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
         data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        maxstep=len(data_rho.loc[:,0])
+        data_rho=data_rho.astype(float)
+
+        ref = np.array([0.0, 0.0, 1.0])
+        e_phi = np.cross(np.broadcast_to(ref, face_centers.shape), face_centers)
+        e_phi_norm = np.linalg.norm(e_phi, axis=1)
+        near_pole = e_phi_norm < 1e-12
+        if np.any(near_pole):
+            ref2 = np.array([1.0, 0.0, 0.0])
+            e_phi[near_pole] = np.cross(np.broadcast_to(ref2, face_centers[near_pole].shape), face_centers[near_pole])
+            e_phi_norm[near_pole] = np.linalg.norm(e_phi[near_pole], axis=1)
+
+        e_phi = e_phi / e_phi_norm[:, None]
+
+
+        th_fc=np.pi/2-theta_fc
+
+        bins=np.linspace(0+0.03,np.pi-0.03,200)
+        bin_centers = 0.5 * (bins[:-1] + bins[1:])
+        eps = 1e-12
+        theta_clipped = np.clip(th_fc, bins[0] + eps, bins[-1] - eps)
+        bin_idx = np.digitize(theta_clipped, bins) - 1
+        valid = (bin_idx >= 0) & (bin_idx < len(bin_centers))
+        counts = np.bincount(bin_idx[valid], minlength=len(bin_centers)).astype(float)
+        nonempty = counts > 0
+
+        res=[]
+        for i in range(0,maxstep,skipstep):
+            L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
+            rho0=data_rho.loc[i,1:]
+            v=np.cross(face_centers,L)/np.array([rho0,rho0,rho0]).T
+            v_phi = np.einsum('ij,ij->i', v, e_phi)
+
+            v_phi_sum = np.bincount(bin_idx[valid], weights=v_phi[valid], minlength=len(bin_centers))
+            v_phi_binned = np.full_like(bin_centers, np.nan, dtype=float)
+            v_phi_binned[nonempty] = v_phi_sum[nonempty] / counts[nonempty]
+            res.append(np.gradient(v_phi_binned, bin_centers)) 
+
+        theta_fc=-bin_centers+np.pi/2
+
+    elif(value=='h'):
+        label_pr='Altitude [cm]'
+        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
+        maxstep=len(data_rho.loc[:,0])
+        for i in range(maxstep):
+            rho0=data_rho.loc[i,1:]
+            GM=0.217909
+            g_eff=GM
+            data_rho.loc[i,1:]=1.25*data_p.loc[i,1:]/(g_eff*rho0)*1e6
+
+    elif(value=='v_phi' or value=='v_phi_sw'):
+        label_pr='V_phi [c]'
+        if(value=='v_phi_sw'):
+            data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
+        else:
+            data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
         maxstep=len(data_rho.loc[:,0])
         n_faces=len(data_rho.loc[0,:])-1
         data_rho=data_rho.astype(float)
@@ -906,33 +1076,12 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
 
         e_phi = e_phi / e_phi_norm[:, None]
 
-        omega=0.1
-        R=10e5
-        g=0.217909*1e18/(3.3e-5*3.3e-5*R*R); 
-        th_fc=np.pi/2-theta_fc
-
-        res=[]
         for i in range(0,maxstep,skipstep):
             L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
             rho0=data_rho.loc[i,1:]
             v=np.cross(face_centers,L)/np.array([rho0,rho0,rho0]).T
             v_phi = np.einsum('ij,ij->i', v, e_phi)
-            c_s=np.sqrt(1.4*data_p.loc[i,1:]/rho0)
-            #res.append(np.abs(v_phi)/c_s)
-            #res.append(0.4/(c_s/np.abs(2*omega*np.cos(th_fc)))) #L_j/LD
-            res.append(np.abs(v_phi)/np.abs(0.4*2*omega*np.cos(th_fc))) #Ro
-
-
-    elif(value=='h'):
-        label_pr='Altitude [cm]'
-        data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
-        data_p=pd.read_table(path+'p.dat', header=None, delimiter=r"\s+")
-        maxstep=len(data_rho.loc[:,0])
-        for i in range(maxstep):
-            rho0=data_rho.loc[i,1:]
-            GM=0.217909
-            g_eff=GM
-            data_rho.loc[i,1:]=1.25*data_p.loc[i,1:]/(g_eff*rho0)*1e6
+            data_rho.loc[i,1:]=v_phi
     else:
         print("wrong type of plot value")
         return
@@ -949,8 +1098,8 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
 
 
     if(ylim_min==0 and ylim_max==0):
-        ylim_min=np.min(res)*0.9
-        ylim_max=np.max(res)*1.1
+        ylim_min=np.nanmin(res)*0.9
+        ylim_max=np.nanmax(res)*1.1
 
 
     for i in tqdm(range(0,maxstep, skipstep)):
@@ -959,8 +1108,12 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
             j=i//skipstep
 
         plt.scatter(theta_fc, res[j], s=4)
+
+        #plt.plot(theta_fc, res[j], linewidth=2)
+        #plt.plot(theta_fc, np.zeros(len(theta_fc)), 'k--', linewidth=1,alpha=0.7, color='tab:red')
+
         #plt.plot(theta_fc, 1/np.cos(theta_fc))
-        plt.xlabel(r'$\theta$')
+        plt.xlabel(r'$\lambda$')
         plt.ylabel(label_pr)
         if(is_log):
             plt.yscale('log')
@@ -971,13 +1124,13 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
         plt.close()
 
 
-plot_vs_theta('Fr',path='results/', skipstep=5, ylim_min=-0.1, ylim_max=1)#, is_log=True)
+# plot_vs_theta('RT_cr',path='results/', skipstep=1, ylim_min=0, ylim_max=0, is_log=False)
 
+# plot_vs_theta('pot_vort_cr',path='results/', skipstep=1, ylim_min=0, ylim_max=0, is_log=False)
 
 #plot_vs_theta('vel_abs',path='results/polar_burst_RT?/', skipstep=5, ylim_min=0, ylim_max=0.03)
 
 #plot_vs_theta('pot_vort_sw',path="results/", skipstep=1, ylim_min=-15000, ylim_max=15000,is_log=False)
 #plot_vs_theta('vel_abs',path='results/', skipstep=10, ylim_min=0, ylim_max=1e-3)
 #plot_vs_theta('omega',path='results/burst_1e6_2e8/', skipstep=5, ylim_min=0, ylim_max=0,is_log=True)
-
 

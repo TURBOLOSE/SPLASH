@@ -41,49 +41,49 @@ public:
 
 
         // clean file and append next line
-        outfile.open("results/rho.dat", std::ios::out | std::ios::trunc);
+        outfile.open(output_path + "rho.dat", std::ios::out | std::ios::trunc);
         outfile.close();
-        outfile.open("results/rho.dat", std::ios::out | std::ios::app);
+        outfile.open(output_path + "rho.dat", std::ios::out | std::ios::app);
 
-        outfile_beta.open("results/beta.dat", std::ios::out | std::ios::trunc);
+        outfile_beta.open(output_path + "beta.dat", std::ios::out | std::ios::trunc);
         outfile_beta.close();
-        outfile_beta.open("results/beta.dat", std::ios::out | std::ios::app);
+        outfile_beta.open(output_path + "beta.dat", std::ios::out | std::ios::app);
 
-        outfile_curl.open("results/curl.dat", std::ios::out | std::ios::trunc);
+        outfile_curl.open(output_path + "curl.dat", std::ios::out | std::ios::trunc);
         outfile_curl.close();
-        outfile_curl.open("results/curl.dat", std::ios::out | std::ios::app);
+        outfile_curl.open(output_path + "curl.dat", std::ios::out | std::ios::app);
 
-        outfile_p.open("results/p.dat", std::ios::out | std::ios::trunc);
+        outfile_p.open(output_path + "p.dat", std::ios::out | std::ios::trunc);
         outfile_p.close();
-        outfile_p.open("results/p.dat", std::ios::out | std::ios::app);
+        outfile_p.open(output_path + "p.dat", std::ios::out | std::ios::app);
 
-        outfile_omega.open("results/omega.dat", std::ios::out | std::ios::trunc);
+        outfile_omega.open(output_path + "omega.dat", std::ios::out | std::ios::trunc);
         outfile_omega.close();
-        outfile_omega.open("results/omega.dat", std::ios::out | std::ios::app);
+        outfile_omega.open(output_path + "omega.dat", std::ios::out | std::ios::app);
 
-        outfile_mach.open("results/mach.dat", std::ios::out | std::ios::trunc);
+        outfile_mach.open(output_path + "mach.dat", std::ios::out | std::ios::trunc);
         outfile_mach.close();
-        outfile_mach.open("results/mach.dat", std::ios::out | std::ios::app);
+        outfile_mach.open(output_path + "mach.dat", std::ios::out | std::ios::app);
 
-        outfile_Y.open("results/Y.dat", std::ios::out | std::ios::trunc);
+        outfile_Y.open(output_path + "Y.dat", std::ios::out | std::ios::trunc);
         outfile_Y.close();
-        outfile_Y.open("results/Y.dat", std::ios::out | std::ios::app);
+        outfile_Y.open(output_path + "Y.dat", std::ios::out | std::ios::app);
 
-        std::string adrs[] = {"results/Lx.dat", "results/Ly.dat", "results/Lz.dat"};
-        std::string adrs_B[] = {"results/Bx.dat", "results/By.dat", "results/Bz.dat"};
+        std::string adrs[] = {"Lx.dat", "Ly.dat", "Lz.dat"};
+        std::string adrs_B[] = {"Bx.dat", "By.dat", "Bz.dat"};
 
 
         for (size_t i=0; i < 3; i++)
         {
 
-            outfile_l[i].open(adrs[i], std::ios::out | std::ios::trunc);
+            outfile_l[i].open(output_path + adrs[i], std::ios::out | std::ios::trunc);
             outfile_l[i].close();
-            outfile_l[i].open(adrs[i], std::ios::out | std::ios::app);
+            outfile_l[i].open(output_path + adrs[i], std::ios::out | std::ios::app);
 
 
-            outfile_B[i].open(adrs_B[i], std::ios::out | std::ios::trunc);
+            outfile_B[i].open(output_path + adrs_B[i], std::ios::out | std::ios::trunc);
             outfile_B[i].close();
-            outfile_B[i].open(adrs_B[i], std::ios::out | std::ios::app);
+            outfile_B[i].open(output_path + adrs_B[i], std::ios::out | std::ios::app);
         }
 
         std::ifstream ifs("input/parameters.json");
@@ -377,7 +377,7 @@ public:
 
                 double Q0=5.3e21;
                 //double rho5=U[n_face][0]*100;
-                double kappa0=0.03; //opacity 0.34 cm^2/g
+                double kappa0=0.34; //opacity 0.34 cm^2/g
                 //double y=1; //col depth test
                 double m_alpha=6.65e-24; // mass of alpha particle in g
                 double k_b=1.3807e-16; // Boltzmann constant in erg/K
@@ -710,7 +710,7 @@ protected:
 
         }
 
-        if(nuclear_burning_on && DIM==6){
+        if(nuclear_burning_on && DIM==6 && false){
             // t< 1000, t<500
             
             double Q0=5.3e21; // erg/(g*s)
@@ -744,7 +744,7 @@ protected:
 
             double heat_mult=1;
 
-            heat_mult=1;
+            heat_mult=1.;
             res[4]+=heat_mult*Q*u[0]*pow(t_unit,3)/pow(R_unit, 2); //back to code units * sigma
             res[4]+=heat_mult*sigma_sb*pow(T_const_heat,4)/PI_unit * t_unit; //const heat bonus
             res[5]-=heat_mult*Q0*rho5*rho5*pow(Y,3)/pow(T8,3)*exp(-44.027/T8)*u[0]*m_alpha/eps_alpha*t_unit;
@@ -1171,7 +1171,7 @@ protected:
             if(nuclear_burning_on && DIM==6){
 
                 double Q0=5.3e21;
-                double kappa0=0.03; //opacity 0.34 cm^2/g
+                double kappa0=0.34; //opacity 0.34 cm^2/g
                 double m_alpha=6.65e-24; // mass of alpha particle in g
                 double k_b=1.3807e-16; // Boltzmann constant in erg/K
                 double c=3e10; // speed of light in cm/s

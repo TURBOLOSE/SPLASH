@@ -13,9 +13,9 @@ int main()
 {
     //SurfaceMesh mesh = uv_sphere(65,128);
     //SurfaceMesh mesh = uv_sphere(128,65);
-    //SurfaceMesh mesh = quad_sphere(5);
+    SurfaceMesh mesh = quad_sphere(6);
     //SurfaceMesh mesh = icosphere(5);
-    SurfaceMesh mesh = icosphere_hex(5);
+    //SurfaceMesh mesh = icosphere_hex(5);
     //SurfaceMesh mesh = uv_sphere_2(128,65);
     //SurfaceMesh mesh = uv_sphere_2(256,130);
 
@@ -37,6 +37,8 @@ int main()
 
     bool accretion_on = parameters["accretion_on"];
     std::string input_f=parameters["input_file"];
+    std::string out_path=parameters["output_path"];
+
 
     //std::string input_f="input/input.dat";
     //std::string input_f="input/final_state(t=0.25).dat";
@@ -57,13 +59,13 @@ int main()
 
     // std::ifstream inData("results/final_state.dat");
 
-    std::ofstream out_deltaE("results/deltaE.dat");
+    std::ofstream out_deltaE(out_path + "/deltaE.dat");
 
 
-    std::ofstream out_lc_0("results/lightcurve0.dat");
-    std::ofstream out_lc_45("results/lightcurve45.dat");
-    std::ofstream out_lc_90("results/lightcurve90.dat");
-    std::ofstream out_lc_180("results/lightcurve180.dat");
+    std::ofstream out_lc_0(out_path + "/lightcurve0.dat");
+    std::ofstream out_lc_45(out_path + "/lightcurve45.dat");
+    std::ofstream out_lc_90(out_path + "/lightcurve90.dat");
+    std::ofstream out_lc_180(out_path + "/lightcurve180.dat");
 
     std::vector<std::array<double, DIM>> U_in;
     U_in.resize(mesh.n_faces());
@@ -77,6 +79,7 @@ int main()
         temp.push_back(element);
         elements_read++;
     }
+
 
     if (elements_read < mesh.n_faces() * DIM)
     {

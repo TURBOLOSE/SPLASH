@@ -3,6 +3,9 @@
 #include "../pmp/surface_mesh.h"
 #include "sph_gen.h"
 #include "../vec3d.hpp"
+#include "../json.hpp"
+
+using json = nlohmann::json;
 
 #include <iostream>
 #include <vector>
@@ -12,6 +15,7 @@
 #include <cmath>
 #include <iomanip>
 #include <sstream>
+
 
 
 #define PMP_SCALAR_TYPE_64
@@ -42,10 +46,14 @@ protected:
     std::vector<std::vector<std::vector<double>>> betas_minus; // baricentric distances to H_minus from face centers for each face for each vertice
 
     std::vector<double> theta_fc, phi_fc; 
+    std::string path = "results/";
 
 public:
     MUSCL_base_geometry(SurfaceMesh mesh)
     {
+        std::ifstream ifs("input/parameters.json");
+        nlohmann::json parameters = nlohmann::json::parse(ifs);
+        path = parameters["output_path"];
 
         vector3d<double> r1, r2;
 
@@ -1076,7 +1084,7 @@ public:
     void write_face_centers()
     {
         std::ofstream outfile;
-        outfile.open("results/face_centers.dat", std::ios::out);
+        outfile.open(path + "/face_centers.dat", std::ios::out);
 
         for (auto face_center : face_centers)
         {
@@ -1096,7 +1104,7 @@ public:
     void write_faces()
     {
         std::ofstream outfile;
-        outfile.open("results/faces.dat", std::ios::out);
+        outfile.open(path + "/faces.dat", std::ios::out);
 
         for (auto face : faces)
         {
@@ -1111,7 +1119,7 @@ public:
     void write_vertices()
     {
         std::ofstream outfile;
-        outfile.open("results/vertices.dat", std::ios::out);
+        outfile.open(path + "/vertices.dat", std::ios::out);
 
         for (auto vertice : vertices)
         {
@@ -1127,7 +1135,7 @@ public:
     {
 
         std::ofstream outfile;
-        outfile.open("results/neighbors_edge.dat", std::ios::out);
+        outfile.open(path + "/neighbors_edge.dat", std::ios::out);
         for (auto neighbor : neighbors_edge)
         {
             for (auto neighbor_element : neighbor)
@@ -1141,7 +1149,7 @@ public:
     {
 
         std::ofstream outfile;
-        outfile.open("results/neighbors.dat", std::ios::out);
+        outfile.open(path + "/neighbors.dat", std::ios::out);
         for (auto neighbor : neighbors)
         {
             for (auto neighbor_element : neighbor)
