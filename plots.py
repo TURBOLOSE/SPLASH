@@ -544,7 +544,7 @@ def projection_plots(value:str, path:str='results/', min:float=None, max:float=N
 # projection_plots('L_xrb', path='/scratch/gpfs/ar3260/results_extra/xbr_eq_long/', min=None, max=None,skipstep=50,remove_avg_omega=False, print_residuals=False, 
 #               log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, minv=0, maxv=0.004, normalized=False, projection='Mercator', tilt_angle=0)#0.0015)
 
-projection_plots('rho', path='results/', min=None, max=None,skipstep=10,remove_avg_omega=False, print_residuals=False, 
+projection_plots('rho', path='results/', min=None, max=None,skipstep=1,remove_avg_omega=False, print_residuals=False, 
               log=False, add_streamplot=False, deltaplot=False, reldeltaplot=False, minv=0, maxv=0.002, normalized=False, projection='Mercator', tilt_angle=0)#0.0015)
 
 # data_rho_c=pd.read_table("results/isoth_cycl9/"+'curl.dat', header=None, delimiter=r"\s+")
@@ -975,8 +975,8 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
             geff[np.logical_or(np.abs(th_fc)<1e-4, np.abs(th_fc-np.pi)<1e-4)] = 0
             rho3=g*rho0**2*1e14/(1.4*data_p.loc[i,1:]*9e27)/1e5
             #data_rho.loc[i,1:]=-geff*np.gradient(rho3, th_fc)/(rho3) /(3.3e-5)**2
-            #entr=data_p.loc[i,1:]/(rho0**1.4)
-            entr=rho0
+            entr=data_p.loc[i,1:]/(rho0**1.4)
+            #entr=rho0
             nonempty = counts > 0
 
             entr_sum = np.bincount(bin_idx[valid], weights=entr[valid], minlength=len(bin_centers))
@@ -1082,6 +1082,37 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
             v=np.cross(face_centers,L)/np.array([rho0,rho0,rho0]).T
             v_phi = np.einsum('ij,ij->i', v, e_phi)
             data_rho.loc[i,1:]=v_phi
+    elif(value=='v_theta' or value=='v_theta_sw'):
+        label_pr='V_theta [c]'
+        if(value=='v_phi_sw'):
+            data_rho=pd.read_table(path+'h.dat', header=None, delimiter=r"\s+")
+        else:
+            data_rho=pd.read_table(path+'rho.dat', header=None, delimiter=r"\s+")
+        data_Lx=pd.read_table(path+'Lx.dat', header=None, delimiter=r"\s+")
+        data_Ly=pd.read_table(path+'Ly.dat', header=None, delimiter=r"\s+")
+        data_Lz=pd.read_table(path+'Lz.dat', header=None, delimiter=r"\s+")
+        maxstep=len(data_rho.loc[:,0])
+        n_faces=len(data_rho.loc[0,:])-1
+        data_rho=data_rho.astype(float)
+
+        ref = np.array([0.0, 0.0, 1.0])
+        e_phi = np.cross(np.broadcast_to(ref, face_centers.shape), face_centers)
+        e_theta = np.cross(face_centers, e_phi)
+        e_theta_norm = np.linalg.norm(e_theta, axis=1)
+        near_pole = e_theta_norm < 1e-12
+        if np.any(near_pole):
+            ref2 = np.array([1.0, 0.0, 0.0])
+            e_theta[near_pole] = np.cross(np.broadcast_to(ref2, face_centers[near_pole].shape), face_centers[near_pole])
+            e_theta_norm[near_pole] = np.linalg.norm(e_theta[near_pole], axis=1)
+
+        e_theta = e_theta / e_theta_norm[:, None]
+
+        for i in range(0,maxstep,skipstep):
+            L=np.array([data_Lx.loc[i,1:],data_Ly.loc[i,1:],data_Lz.loc[i,1:]]).T 
+            rho0=data_rho.loc[i,1:]
+            v=np.cross(face_centers,L)/np.array([rho0,rho0,rho0]).T
+            v_theta = np.einsum('ij,ij->i', v, e_theta)
+            data_rho.loc[i,1:]=v_theta
     else:
         print("wrong type of plot value")
         return
@@ -1124,7 +1155,7 @@ def plot_vs_theta(value:str,path:str='results/', skipstep:int=1, ylim_min:float=
         plt.close()
 
 
-# plot_vs_theta('RT_cr',path='results/', skipstep=1, ylim_min=0, ylim_max=0, is_log=False)
+# plot_vs_theta('v_theta',path='results/', skipstep=50, ylim_min=0, ylim_max=1e-3, is_log=False)
 
 # plot_vs_theta('pot_vort_cr',path='results/', skipstep=1, ylim_min=0, ylim_max=0, is_log=False)
 

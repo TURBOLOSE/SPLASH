@@ -2339,8 +2339,209 @@ def make_input_6_polar_dense_spot():
 
 
 
-
 def make_input_6_equatorial_hot_spot():
+    """
+    Equatorial pressure belt with uniform initial Sigma and a purely zonal
+    velocity satisfying the full steady gradient-wind balance
+
+        (1/(Sigma R)) dPi/dtheta = 2 Omega cos(theta) v_phi
+                                  + (v_phi**2/R) cot(theta)
+
+    in the rotating frame (no explicit centrifugal-potential source term).
+
+    The original tanh(4 - 5*|latitude|) profile is not differentiable at the
+    equator and has a non-zero one-sided pressure gradient where f=0, so no
+    finite purely-zonal gradient-wind solution exists there.  The profile
+    below is a very small smooth regularization that preserves the original
+    front latitude (|lambda|=4/5 rad) and the original local slope there.
+    """
+    face_centers = pd.read_table('results/face_centers.dat',
+                                 header=None, delimiter=r"\s+")
+    face_centers = np.array(face_centers, dtype=float)
+    face_centers /= np.linalg.norm(face_centers, axis=1, keepdims=True)
+    N = len(face_centers)
+
+    gam0 = 5.0/3.0
+    #gam0=1000000000
+    gam = 2.0 - 1.0/gam0
+    Omega0 = 0.1
+
+    a_ns = 10e5
+    m_alpha = 6.65e-24
+    k_b = 1.3807e-16
+    g = 0.217909*1e18/(3.3e-5*3.3e-5*a_ns*a_ns)
+    g0 = 0.217909
+
+    T_in = 2e8*np.ones(N)
+    rho_in = 1e7*np.ones(N)
+    p_fluc = 0.95
+
+    aa = m_alpha/(3*k_b)
+    b = g/gam
+    rho0 = T_in*rho_in/(aa*b) / 1e7
+    p0 = T_in**2*rho_in/(aa**2*b) / 9e27
+
+    # Geometry: theta=colatitude, latitude lambda=pi/2-theta.
+    theta = np.arccos(np.clip(face_centers[:, 2], -1.0, 1.0))
+    lat = np.pi/2.0 - theta
+    phi = np.arctan2(face_centers[:, 1], face_centers[:, 0])
+    R_sphere = 1.0
+
+    # ------------------------------------------------------------------
+    # Smooth version of the SAME equatorial belt profile.
+    # Original: arg = 4 - 5*|lambda|, so lambda_front = 4/5.
+    #
+    # We use q(lambda)=sqrt(sin^2(lambda)+eps_mu^2)-eps_mu.
+    # This is even and smooth at the equator, and dq/dlambda -> 0 at poles.
+    # Constants A_prof and B_prof are chosen so that:
+    #   arg(lambda_front)=0
+    #   d(arg)/d|lambda| at the front = -5
+    # exactly as in the original profile.
+    # ------------------------------------------------------------------
+    lambda_front = 4.0/5.0
+    slope_front = 5.0
+    eps_mu = 0.02       # only regularizes a narrow equatorial region
+
+    mu = np.sin(lat)
+    q = np.sqrt(mu**2 + eps_mu**2) - eps_mu
+
+    mu_f = np.sin(lambda_front)
+    q_f = np.sqrt(mu_f**2 + eps_mu**2) - eps_mu
+    dq_dlat_f = (mu_f*np.cos(lambda_front)
+                 / np.sqrt(mu_f**2 + eps_mu**2))
+    B_prof = slope_front / dq_dlat_f
+    A_prof = B_prof * q_f
+
+    print(A_prof, B_prof)
+    #A_prof=2
+
+    arg = A_prof - B_prof*q
+    p = p0 * (1.0 + p_fluc*np.tanh(arg))
+
+    # Uniform Sigma (for now)
+    rho = rho0.copy()
+    #rho=rho0 * (1.0 - 0.1*np.tanh(arg))
+    #rho=rho0*np.sqrt(p/p0)  # isentropic
+
+
+    #rho+=2*np.sin(phi)**2 #m=4seed
+
+    # Analytic derivative dPi/dtheta for the smoothed profile.
+    # q = sqrt(cos^2(theta)+eps_mu^2)-eps_mu
+    # dq/dtheta = -cos(theta) sin(theta) / sqrt(cos^2(theta)+eps_mu^2)
+    cos_th = np.cos(theta)
+    sin_th = np.sin(theta)
+    dq_dtheta = -(cos_th*sin_th) / np.sqrt(cos_th**2 + eps_mu**2)
+    darg_dtheta = -B_prof*dq_dtheta
+    dp_dtheta = p0 * p_fluc / np.cosh(arg)**2 * darg_dtheta
+
+    # ------------------------------------------------------------------
+    # Full gradient-wind solution.
+    #
+    # Steady theta momentum for v = v_phi e_phi:
+    #   (1/(Sigma R)) dPi/dtheta
+    #       = f v_phi + (cot(theta)/R) v_phi^2,
+    #   f = 2 Omega cos(theta).
+    #
+    # Hence A v^2 + B v + C = 0 with
+    #   A=cot(theta)/R, B=f, C=-dPi/dtheta/(Sigma R).
+    # We choose the root continuously connected to the geostrophic root
+    # v_geo=(dPi/dtheta)/(Sigma R f).
+    # ------------------------------------------------------------------
+    f = 2.0*Omega0*cos_th
+    A_quad = np.zeros(N)
+    regular_sin = np.abs(sin_th) > 1e-12
+    A_quad[regular_sin] = cos_th[regular_sin]/(sin_th[regular_sin]*R_sphere)
+    G = dp_dtheta/(rho*R_sphere)
+
+    v_phi = np.zeros(N)
+
+    # Exact poles: smooth scalar field has dPi/dtheta=0; regular zonal speed=0.
+    pole = np.abs(sin_th) <= 1e-10
+
+    # Away from equator/poles, solve quadratic and choose geostrophic branch.
+    solve = (~pole) & ((np.abs(A_quad) > 1e-10) | (np.abs(f) > 1e-10))
+    disc = f[solve]**2 + 4.0*A_quad[solve]*G[solve]
+    if np.any(disc < -1e-12):
+        bad = np.where(solve)[0][disc < -1e-12]
+        raise RuntimeError(
+            f'No real gradient-wind solution in {len(bad)} cells; '
+            f'min discriminant={np.min(disc):.3e}')
+    disc = np.maximum(disc, 0.0)
+    sqrt_disc = np.sqrt(disc)
+
+    A_s = A_quad[solve]
+    f_s = f[solve]
+    G_s = G[solve]
+
+    # If curvature term is tiny, use the linear geostrophic limit directly.
+    linear = np.abs(A_s) < 1e-10
+    roots = np.zeros_like(A_s)
+    roots[linear] = G_s[linear]/f_s[linear]
+
+    nonlinear = ~linear
+    r1 = (-f_s[nonlinear] + sqrt_disc[nonlinear])/(2.0*A_s[nonlinear])
+    r2 = (-f_s[nonlinear] - sqrt_disc[nonlinear])/(2.0*A_s[nonlinear])
+    v_geo = G_s[nonlinear]/f_s[nonlinear]
+    roots[nonlinear] = np.where(np.abs(r1-v_geo) <= np.abs(r2-v_geo), r1, r2)
+    v_phi[solve] = roots
+
+    # At an exactly equatorial cell f=A=G=0.  Use the smooth theta->pi/2
+    # limiting gradient-wind solution obtained after dividing the balance by
+    # latitude.  This keeps the uv mesh from getting an arbitrary v=0 notch.
+    equator = (~pole) & (~solve)
+    if np.any(equator):
+        sech2_eq = 1.0/np.cosh(A_prof)**2
+        C_eq = (p0[equator] * p_fluc * B_prof * sech2_eq
+                / (rho[equator] * R_sphere * eps_mu))
+        # limit: v^2/R + 2 Omega v - C_eq = 0; choose weak/geostrophic branch
+        v_phi[equator] = (-Omega0*R_sphere
+                          + np.sqrt((Omega0*R_sphere)**2 + C_eq*R_sphere))
+
+    # Build vector velocity and angular momentum.
+    phi = np.arctan2(face_centers[:, 1], face_centers[:, 0])
+    e_phi = np.column_stack((-np.sin(phi), np.cos(phi), np.zeros(N)))
+    v = v_phi[:, None]*e_phi
+    l = rho[:, None]*np.cross(face_centers, v)
+
+    E = p/(gam-1.0) + 0.5*rho*np.sum(v**2, axis=1)
+
+    # ------------------------------------------------------------------
+    # Diagnostics: evaluate the CONTINUUM gradient-wind residual using the
+    # same analytic profile.  This should be near roundoff.
+    # ------------------------------------------------------------------
+    cot_th = np.zeros(N)
+    cot_th[regular_sin] = cos_th[regular_sin]/sin_th[regular_sin]
+    gw_lhs = dp_dtheta/(rho*R_sphere)
+    gw_rhs = f*v_phi + (v_phi**2/R_sphere)*cot_th
+    gw_res = gw_lhs-gw_rhs
+
+    c_s = np.sqrt(gam*p/rho)
+    mach = np.abs(v_phi)/c_s
+    L_R = np.sqrt(gam*np.mean(p0/rho0))/(2.0*Omega0)
+
+    T = m_alpha/(3*k_b) * gam*(p*9e27)/(rho*1e7)
+
+    print('T8 range from', np.min(T)/1e8, 'to', np.max(T)/1e8)
+    print('mean log 10 Sigma:', np.mean(np.log10(rho*1e7)), 'g/cm^2')
+    print('mean rho:', np.mean(g*rho**2*1e14/(gam*p*9e27)), 'g/cm^3')
+    print('mean h:', np.mean(gam*p/(rho*g0))*11000, 'm')
+    print('mean c_s:', np.mean(c_s), 'c')
+    print('max Mach:', np.max(mach))
+    print('L_R:', L_R)
+    print('max |gradient-wind residual|:', np.max(np.abs(gw_res)))
+    print('relative GW residual:',
+          np.max(np.abs(gw_res))/(np.max(np.abs(gw_lhs))+1e-300))
+    print('profile regularization eps_mu:', eps_mu)
+    print('front latitude:', lambda_front, 'rad')
+
+    pd.DataFrame(
+        np.column_stack([rho, l[:, 0], l[:, 1], l[:, 2], E, rho])
+    ).to_csv('input/input.dat', index=False, sep=' ', header=False)
+
+
+
+def make_input_6_equatorial_hot_spot_old():
     face_centers = pd.read_table('results/face_centers.dat',
                                   header=None, delimiter=r"\s+")
     face_centers = np.array(face_centers)
