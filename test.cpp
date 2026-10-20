@@ -116,6 +116,7 @@ int main()
     test2.write_t_omega_z();
     test2.write_t_L();
     test2.write_t_mach();
+    test2.write_t_source_budget();
 
     //if(test2.get_m_field_on()){
     //    test2.write_t_B();
@@ -180,6 +181,7 @@ int main()
             test2.write_t_L();
             //test2.write_t_betas();
             test2.write_t_mach();
+            test2.write_t_source_budget();
 
             // if(test2.get_m_field_on()){
             //     test2.write_t_B();
@@ -199,6 +201,7 @@ int main()
             test2.write_t_L();
             //test2.write_t_betas();
             test2.write_t_mach();
+            test2.write_t_source_budget();
             // if(test2.get_m_field_on()){
             //     test2.write_t_B();
             // }

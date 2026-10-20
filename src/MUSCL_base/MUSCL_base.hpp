@@ -4,6 +4,10 @@
 #include "../json.hpp"
 #include <omp.h>
 #include <array>
+#include <limits>
+#include <stdexcept>
+#include "../numerical_safety.hpp"
+#include "../physics/pressure_conversion.hpp"
 
 //constexpr size_t DIM = 8;
 constexpr size_t DIM = 5;
@@ -16,9 +20,17 @@ class MUSCL_base : public MUSCL_base_geometry
 protected:
     std::vector<StateVec> U, U_temp, U_temp_1, source_plus;
     std::vector<double> rho_an, p_an;
+    std::vector<int> reconstruction_failed;
     std::vector<std::vector<StateVec>> flux_var_plus, flux_var_minus, U_plus, U_minus;
     // flux_var^plus_ij flux_var^minus_ij, U_ij (short), U_ji(short)
-    double dt, gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, density_floor, Y_floor, pressure_floor, CFL,a, min_dt=1e-10;
+    double dt = 0., gam, M, N, h0, t, max_vel, rho_full, E_full, c_s, CFL,a, min_dt=1e-10;
+    // pressure_fc() is called while bootstrapping the initial floors.
+    double density_floor = 0., Y_floor = 0., pressure_floor = 0.;
+    bool enforce_tangent_angular_momentum = false;
+    bool project_restart_angular_momentum = false;
+    double angular_momentum_tolerance = 1e-5;
+    std::array<double, 3> initial_projection_L{}, projection_L{}, projection_first{}, projection_last{};
+    size_t diagnostic_stage = 0;
     int implicit_iternum;
     bool var_gamma, implicit_solve_on, non_inertial_rf_on, mag_field_on, centrifugal_force_on, nuclear_burning_on;
     size_t steps, threads;
@@ -35,7 +47,7 @@ public:
 
         if (U_in.size() != mesh.n_faces())
         {
-            std::cout << "U_in is wrong size, U_in.size() should be equal to mesh.n_faces()" << std::endl;
+            throw std::invalid_argument("U_in.size() must equal mesh.n_faces()");
         }
         size_t nf=this->n_faces();
         // memory allocation
@@ -48,6 +60,7 @@ public:
         source_plus.resize(nf);
         rho_an.resize(nf);
         p_an.resize(nf);
+        reconstruction_failed.resize(nf);
 
         std::fill(rho_an.begin(), rho_an.end(), 0);
         std::fill(p_an.begin(), p_an.end(), 0);
@@ -74,6 +87,31 @@ public:
         a=parameters["a_isothermal"];
         omega_ns = parameters["omega_ns"];
         nuclear_burning_on = parameters["nuclear_burning_on"];
+        if (DIM != 4 && (!(gam > 1.) || !(gam < 2.) || !std::isfinite(gam)))
+            throw std::invalid_argument("Adiabatic gamma must be finite and between one and two");
+        enforce_tangent_angular_momentum = parameters.value("enforce_tangent_angular_momentum", false);
+        project_restart_angular_momentum = parameters.value("project_restart_angular_momentum", false);
+        angular_momentum_tolerance = parameters.value("angular_momentum_tolerance", 1e-5);
+        if (!(angular_momentum_tolerance > 0.) || !std::isfinite(angular_momentum_tolerance))
+            throw std::invalid_argument("angular_momentum_tolerance must be finite and positive");
+        if (project_restart_angular_momentum && !enforce_tangent_angular_momentum)
+            throw std::invalid_argument("Restart projection requires tangent angular-momentum enforcement");
+        const double initial_radial_fraction = angular_momentum_radial_fraction();
+        if (!std::isfinite(initial_radial_fraction))
+            throw std::invalid_argument("Nonfinite initial angular momentum");
+        if (enforce_tangent_angular_momentum &&
+            initial_radial_fraction > angular_momentum_tolerance && !project_restart_angular_momentum)
+            throw std::invalid_argument("Initial L is not tangent: use a clean initial state or explicitly set project_restart_angular_momentum=true");
+        if (enforce_tangent_angular_momentum) {
+            for (size_t i = 0; i < nf; ++i) {
+                auto change = splash::project_angular_momentum(U[i], face_centers[i]);
+                for (size_t k = 0; k < 3; ++k)
+                    initial_projection_L[k] += surface_area[i]*change[k];
+            }
+        } else if (initial_radial_fraction > angular_momentum_tolerance) {
+            std::cerr << "Initial radial-L RMS fraction = " << initial_radial_fraction
+                      << "; tangent enforcement is disabled (legacy transport).\n";
+        }
 
 
 
@@ -135,10 +173,14 @@ public:
         size_t nf=this->n_faces();
         for (size_t i = 0; i < nf; i++)
         {
+            if (!(U[i][0] > 0.) || !std::isfinite(U[i][0]))
+                throw std::invalid_argument("Initial surface density must be finite and positive");
             if (U[i][0] < min_rho)
                 min_rho = U[i][0];
 
             p = pressure_fc(U[i], i);
+            if (!(p > 0.) || !std::isfinite(p))
+                throw std::invalid_argument("Initial recovered pressure must be finite and positive");
             if (p < min_p)
                 min_p = p;
         }
@@ -152,10 +194,13 @@ public:
 
     void do_step(double dt0)
     { // RK2 or implicit trapezioidal
-
+        if (!(dt0 > 0.) || !std::isfinite(dt0))
+            throw std::invalid_argument("Timestep must be finite and positive");
 
         size_t nf=this->n_faces();
         dt = dt0;
+        diagnostic_stage = 0;
+        begin_source_diagnostics();
         U_temp = U;
 
         find_v_max();
@@ -331,6 +376,12 @@ public:
             }
         }
 
+        // The final accepted RHS is midpoint (or the final trapezoidal iterate).
+        const bool trapezoidal = implicit_solve_on && implicit_iternum > 1;
+        auto accepted_projection = splash::accepted_source_increment(projection_first, projection_last, dt, trapezoidal);
+        for (size_t k = 0; k < 3; ++k) projection_L[k] += accepted_projection[k];
+        finish_source_diagnostics(dt, trapezoidal);
+
         double temp = 0;
         double l1, l2, l3 = 0;
         double temp_E = 0;
@@ -375,6 +426,54 @@ public:
         return t;
     }
 
+    double angular_momentum_radial_fraction() const
+    {
+        double radial = 0., total = 0.;
+        for (size_t i = 0; i < U.size(); ++i) {
+            for (size_t k = 1; k <= 3; ++k)
+                if (!std::isfinite(U[i][k])) return std::numeric_limits<double>::quiet_NaN();
+            radial += surface_area[i]*splash::radial_angular_momentum_squared(U[i], face_centers[i]);
+            for (size_t k = 1; k <= 3; ++k) total += surface_area[i]*U[i][k]*U[i][k];
+        }
+        return total > 0. ? std::sqrt(radial/total) : 0.;
+    }
+
+    // Offline operator replay: evaluates reconstruction, fluxes and sources at
+    // the saved state without accepting a step, changing time, or accumulating
+    // source/projection work. Stage caches are refreshed. This is also the
+    // regression-test entry point; no do_step() call is needed.
+    std::vector<StateVec> evaluate_rhs(double reconstruction_dt)
+    {
+        if (!(reconstruction_dt > 0.) || !std::isfinite(reconstruction_dt))
+            throw std::invalid_argument("Reconstruction timestep must be positive");
+        auto original = U;
+        const double original_dt = dt;
+        const size_t original_stage = diagnostic_stage;
+        const auto original_first = projection_first, original_last = projection_last;
+        dt = reconstruction_dt;
+        diagnostic_stage = 0;
+        begin_source_diagnostics();
+        try {
+            find_U_edges();
+            find_flux_var();
+            res2d(1.);
+            auto rhs = U;
+            U = std::move(original);
+            dt = original_dt;
+            diagnostic_stage = original_stage;
+            projection_first = original_first;
+            projection_last = original_last;
+            return rhs;
+        } catch (...) {
+            U = std::move(original);
+            dt = original_dt;
+            diagnostic_stage = original_stage;
+            projection_first = original_first;
+            projection_last = original_last;
+            throw;
+        }
+    }
+
     void set_time(double t_new)
     {
         t = t_new;
@@ -404,6 +503,7 @@ protected:
 
         double d_pres;
         size_t nf=this->n_faces();
+        projection_last.fill(0.);
         for (size_t i = 0; i < nf; i++)
         {
             for (size_t k = 0; k < DIM; k++) // source terms
@@ -422,11 +522,10 @@ protected:
 
                 for (size_t k = 0; k < DIM; k++)
                 {
-                    if (std::isnan((flux_var_minus[i][j][k])))
+                    if (!std::isfinite(flux_var_minus[i][j][k]))
                     {
                         stop_check = true;
-                        std::cout << "time: " << t << " face: " << i << " edge: " << j << " NaN in flux detected!" << std::endl;
-                        exit(1);
+                        throw std::runtime_error("Nonfinite numerical flux at face " + std::to_string(i));
                     }
 
                     U[i][k] -= dt_here * (distance(vertices[faces[i][j]], vertices[faces[i][j1]]) / surface_area[i]) * (flux_var_minus[i][j][k]); // todo:pre-compute distances maybe
@@ -435,7 +534,13 @@ protected:
                     // U[i][k] -= round_diff * dt_here * (vertices[faces[i][j]] - vertices[faces[i][j1]]).norm() / surface_area[i] * (flux_var_minus[i][j][k]);
                 }
             }
+            if (enforce_tangent_angular_momentum) {
+                auto change = splash::project_angular_momentum(U[i], face_centers[i]);
+                for (size_t k = 0; k < 3; ++k)
+                    projection_last[k] += surface_area[i]*change[k]/dt_here;
+            }
         }
+        if (diagnostic_stage++ == 0) projection_first = projection_last;
     };
 
     virtual StateVec flux_star(StateVec& ul, StateVec& ur, int n_face, int n_edge) = 0;
@@ -443,6 +548,13 @@ protected:
     virtual StateVec source(StateVec& u, int n_face) = 0;
     virtual double make_gam(StateVec &u, vector3d<double> &r) = 0;
     virtual double extra_dt_constr() = 0;
+    virtual void begin_source_diagnostics() {}
+    virtual void source_diagnostics_ready() {}
+    virtual void finish_source_diagnostics(double, bool) {}
+    double source_time() const
+    {
+        return t + (diagnostic_stage == 0 ? 0. : diagnostic_stage == 1 ? .5*dt : dt);
+    }
     // virtual void set_analytical_solution();
 
 private:
@@ -533,8 +645,8 @@ private:
                 if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
                     beta = beta_ceil;
 
-                beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
-                beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
+                beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5.0 / 4.0)));
+                beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5.0 / 4.0)));
 
                 if (beta < beta_floor) // beta limitations
                     beta = beta_floor;
@@ -603,6 +715,7 @@ private:
             }
             source_plus[i] = source(U[i], i);
         }
+        source_diagnostics_ready();
     }
 
     void find_U_edges() // finding U_ij and U_ji
@@ -610,8 +723,19 @@ private:
 
         // std::vector<double> pp, pm, lim;
         size_t nf=this->n_faces();
+        std::fill(reconstruction_failed.begin(), reconstruction_failed.end(), 0);
         for (size_t i = 0; i < nf; i++) // tag1
         {
+            if (!(U[i][0] > 0.) || !std::all_of(U[i].begin(), U[i].end(), [](double x) {return std::isfinite(x);}))
+                throw std::runtime_error("Invalid conservative stage state at face " + std::to_string(i));
+            if (DIM == 5) {
+                vector3d<double> ell;
+                for (size_t k = 0; k < 3; ++k) ell[k] = U[i][k+1];
+                auto rr = face_centers[i]/face_centers[i].norm();
+                auto vv = cross_product(rr, ell)/U[i][0];
+                if (!(U[i][4] > .5*U[i][0]*vv.norm()*vv.norm()))
+                    throw std::runtime_error("Nonpositive internal energy at face " + std::to_string(i));
+            }
 
             U[i][0] -= rho_an[i];
 
@@ -663,7 +787,12 @@ private:
 
                         // std::cout<<pm[4]<<" "<<pp[4]<<"  "<<lim[4]<<"\n";
 
-                        U_plus[i][j][k] = E_edge(U_plus[i][j], i, j); // p -> E (tag1)
+                        try {
+                            U_plus[i][j][k] = E_edge(U_plus[i][j], i, j); // p -> E (tag1)
+                        } catch (const std::exception&) {
+                            reconstruction_failed[i] = 1;
+                            U_plus[i][j][k] = 0.;
+                        }
                         // std::cout<<U_plus[i][j][k]<<"\n";
                     }
                     else
@@ -672,10 +801,17 @@ private:
                     }
 
                     // U_plus[i][j][k] = U[i][k] + pp[k] * (kappa+1)/2. * BM_dist[i][j]+pm[k] * (1-kappa)/2. * BM_dist[i][j];
-                    U_minus[neighboor_num][j0][k] = U_plus[i][j][k];
                 }
+                if (enforce_tangent_angular_momentum) {
+                    const auto edge_r = vertices[faces[i][j]] + vertices[faces[i][(j+1)%faces[i].size()]];
+                    splash::project_angular_momentum(U_plus[i][j], edge_r);
+                }
+                U_minus[neighboor_num][j0] = U_plus[i][j];
             }
         }
+        for (size_t i = 0; i < nf; ++i)
+            if (reconstruction_failed[i])
+                throw std::runtime_error("Nonphysical edge reconstruction or failed pressure inversion at face " + std::to_string(i));
     };
 
     StateVec U_H_plus(int n_face, int face_edge)
@@ -753,6 +889,7 @@ private:
         return res1;
     }
 
+protected:
     double pressure_fc(StateVec &u, int n_face) // u[4] == energy
     {                   
         
@@ -853,7 +990,7 @@ private:
     }
 
     double E_edge(StateVec &u, int n_face, int n_edge) // u[4] == pressure
-    {                                                             // because we reconstruct pressure on edge we needed new formula for beta
+    { // Invert the conservative pressure closure at the reconstructed edge.
         vector3d<double> l_vec, vel, r;
 
         l_vec[0] = u[1];
@@ -870,71 +1007,16 @@ private:
         vel = cross_product(r, l_vec);
         vel /= (-u[0]);
 
-        double theta = std::acos(r[2]);
-
-        //if(non_inertial_rf_on)
-        //vel += cross_product(omega0, r);
-
-        double gam_0 = gam;
-
-        double GM = 0.217909;
-        double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
-        double H=(2*gam_0-1)/(gam_0-1)*u[4]/(u[0]*g_eff);
-
-        if (var_gamma)
-        {
-
-            double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
-            double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
-            // new expression for C
-            double C = 12. / 5 * k_m * u[0] / (u[4]) * pow(3. / 4 * c_sigma * g_eff * u[0], 1. / 4);
-            double beta_switch = 0.736194670678821; // switch point for initial function
-            double C_switch = -1 - 1 / (beta_switch - 1);
-            double beta;
-
-
-
-    
-            if (C <= C_switch)
-            {
-                beta = 1 - 1 / (1 + C);
-            }
-            else
-            {
-                beta = 1 - pow(2 / C, 4);
-            }
-
-            double beta_ceil = 1 - 1e-9, beta_floor = 0;
-
-            if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
-                beta = beta_ceil;
-
-            beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
-            beta = beta - (beta / (pow(1 - beta, 1. / 4) * (1 - beta / 2)) - C) / (-(beta * beta + 6 * beta - 8) / (2 * (2 - beta) * (2 - beta) * pow(1 - beta, 5 / 4.)));
-
-            if (beta < beta_floor) // beta limitations
-                beta = beta_floor;
-
-            if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
-                beta = beta_ceil;
-
-            gam_0 = (10 - 3 * beta) / (8 - 3 * beta);
-        }
-
-        //if(non_inertial_rf_on){
-        //return 1 / (gam_0 - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2 +gam_0/(gam_0 - 1)* omega_ns * omega_ns * std::sin(theta) * std::sin(theta)*u[0]/2;
-        //return 1 / (gam_0 - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2 +omega_ns * omega_ns * std::sin(theta) * std::sin(theta)*u[0]/2;
-        //}
-        //else{
-
-        double res=1 / (gam_0 - 1) * u[4] + u[0] * (vel.norm() * vel.norm()) / 2;
+        double res = splash::internal_from_pressure(u[0], u[4], vel.norm()*vel.norm(), gam, var_gamma)
+                   + u[0]*vel.norm()*vel.norm()/2;
         if(mag_field_on){
+        const double g_eff = std::max(0.217909-vel.norm()*vel.norm(),0.);
+        const double H=(2*gam-1)/(gam-1)*u[4]/(u[0]*g_eff);
         vector3d<double> B;
         B[0]=u[5]; B[1]=u[6]; B[2]=u[7];
         res+=B.norm()*B.norm()/(8*M_PI*H);
         }
 
         return res;
-        //}
     }
 };

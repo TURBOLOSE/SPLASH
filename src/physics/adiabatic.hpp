@@ -15,6 +15,60 @@ protected:
     bool accretion_on, friction_on, smooth_acc_on, extra_heat_on;
     double total_mass, acc_rate, e_acc, omega_acc_abs, tilt_angle, acc_width, area_coeff, alpha, t_acc, extra_heat_power;
     double en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o;
+    struct SourceFaceDiagnostics {
+        std::array<double, 4> energy{}; // acc gain, settling loss, friction loss, radiation loss
+        double g_eff = 0., f_r = 0.;
+        bool invalid = false;
+    };
+    std::vector<SourceFaceDiagnostics> source_face_diagnostics;
+    std::array<double, 4> first_energy_rates{}, last_energy_rates{}, cumulative_energy{};
+    StateVec first_source_rates{}, last_source_rates{}, cumulative_source{};
+    size_t source_stage_count = 0, nonpositive_gravity_faces = 0, settling_gain_faces = 0;
+    bool strict_source_domain = false;
+    std::ofstream outfile_source_budget, outfile_numerical_budget;
+
+    void begin_source_diagnostics() override { source_stage_count = 0; }
+
+    void source_diagnostics_ready() override
+    {
+        last_energy_rates.fill(0.);
+        last_source_rates.fill(0.);
+        nonpositive_gravity_faces = settling_gain_faces = 0;
+        // source() writes only its own face. Reduce after the OpenMP loop,
+        // in face order, so thread count does not change diagnostics.
+        for (size_t i = 0; i < source_face_diagnostics.size(); ++i) {
+            const auto& d = source_face_diagnostics[i];
+            if (d.invalid)
+                throw std::runtime_error("Invalid hydrodynamic source state at face " + std::to_string(i));
+            if (d.g_eff <= 0.) ++nonpositive_gravity_faces;
+            if (d.f_r > 1.) ++settling_gain_faces;
+            for (size_t k = 0; k < 4; ++k)
+                last_energy_rates[k] += surface_area[i]*d.energy[k];
+            for (size_t k = 0; k < DIM; ++k) {
+                if (!std::isfinite(source_plus[i][k]))
+                    throw std::runtime_error("Nonfinite source at face " + std::to_string(i));
+                last_source_rates[k] += surface_area[i]*source_plus[i][k];
+            }
+        }
+        if (strict_source_domain && nonpositive_gravity_faces)
+            throw std::runtime_error("Nonpositive effective gravity in source evaluation");
+        if (source_stage_count++ == 0) {
+            first_energy_rates = last_energy_rates;
+            first_source_rates = last_source_rates;
+        }
+    }
+
+    void finish_source_diagnostics(double accepted_dt, bool trapezoidal) override
+    {
+        const auto energy = splash::accepted_source_increment(first_energy_rates, last_energy_rates, accepted_dt, trapezoidal);
+        const auto state = splash::accepted_source_increment(first_source_rates, last_source_rates, accepted_dt, trapezoidal);
+        for (size_t k = 0; k < 4; ++k) cumulative_energy[k] += energy[k];
+        for (size_t k = 0; k < DIM; ++k) cumulative_source[k] += state[k];
+        en_gain_acc_o = cumulative_energy[0];
+        en_loss_fall_o = cumulative_energy[1];
+        en_loss_fric_o = cumulative_energy[2];
+        en_loss_rad_o = cumulative_energy[3];
+    }
 
 
 public:
@@ -37,6 +91,45 @@ public:
             stop_check = true;
             exit(1);
         }
+
+        std::ifstream ifs("input/parameters.json");
+        json parameters = json::parse(ifs);
+        acc_rate = parameters["accretion_rate"];
+        e_acc = parameters["e_acc"];
+        omega_acc_abs = parameters["omega_acc_abs"];
+        tilt_angle = parameters["tilt_angle"];
+        acc_width = parameters["acc_width"];
+        alpha = parameters["alpha"];
+        friction_on = parameters["friction_on"];
+        smooth_acc_on = parameters["smooth_acc_on"];
+        t_acc = parameters["t_acc"];
+        extra_heat_on = parameters["extra_heat_on"];
+        extra_heat_power = parameters["extra_heat_power"];
+        strict_source_domain = parameters.value("strict_source_domain", false);
+        if (!(acc_width > 0.) || !std::isfinite(acc_width) ||
+            !std::isfinite(acc_rate) || acc_rate < 0. ||
+            !std::isfinite(alpha) || (friction_on && !(alpha > 0.)) ||
+            !std::isfinite(e_acc) || !std::isfinite(omega_acc_abs) ||
+            !std::isfinite(tilt_angle) || !std::isfinite(extra_heat_power) ||
+            (smooth_acc_on && (!(t_acc > 0.) || !std::isfinite(t_acc))))
+            throw std::invalid_argument("Invalid accretion/friction source parameters");
+        source_face_diagnostics.resize(nf);
+
+        // Preserve the existing untilted-belt normalization; evaluate it
+        // deterministically and archive the value actually used by this run.
+        area_coeff = 0.;
+        const double sigma = acc_width/2.355;
+        total_mass = 0.;
+        for (size_t n_face = 0; n_face < faces.size(); ++n_face) {
+            const double theta = std::acos(std::clamp(face_centers[n_face][2]/face_centers[n_face].norm(), -1., 1.));
+            area_coeff += surface_area[n_face]/std::sqrt(2*M_PI*sigma*sigma)*
+                          std::exp(-std::pow(theta-M_PI/2, 2)/(2*sigma*sigma));
+            total_mass += U[n_face][0]*surface_area[n_face];
+        }
+        area_coeff /= 4*M_PI;
+        if ((accretion_on && (!(area_coeff > 0.) || !std::isfinite(area_coeff))) ||
+            !(total_mass > 0.) || !std::isfinite(total_mass))
+            throw std::invalid_argument("Invalid accretion normalization or initial mass");
 
 
 
@@ -86,42 +179,34 @@ public:
             outfile_B[i].open(adrs_B[i], std::ios::out | std::ios::app);
         }
 
-        std::ifstream ifs("input/parameters.json");
-        json parameters = json::parse(ifs);
-
-        acc_rate = parameters["accretion_rate"];
-        e_acc = parameters["e_acc"];
-        omega_acc_abs = parameters["omega_acc_abs"];
-        tilt_angle = parameters["tilt_angle"];
-        acc_width = parameters["acc_width"];
-        alpha = parameters["alpha"];
-        friction_on = parameters["friction_on"];
-        smooth_acc_on = parameters["smooth_acc_on"];
-        t_acc=parameters["t_acc"];
-        extra_heat_on = parameters["extra_heat_on"];
-        extra_heat_power=parameters["extra_heat_power"];
-
-        area_coeff = 0;
-        double mu = M_PI / 2;
-        double sigma = acc_width / 2.355; // FWHM formula
-        double theta;
-
-        for (size_t n_face; n_face < faces.size(); n_face++)
-        {
-
-            theta = std::acos(face_centers[n_face][2] / face_centers[n_face].norm());
-
-            area_coeff += surface_area[n_face] / std::sqrt(2 * M_PI * sigma * sigma) *
-                          std::exp(-(theta - mu) * (theta - mu) / (2 * sigma * sigma));
+        for (auto* stream : {&outfile, &outfile_p, &outfile_omega, &outfile_curl,
+                             &outfile_beta, &outfile_mach, &outfile_Y})
+            *stream << std::setprecision(std::numeric_limits<double>::max_digits10);
+        for (size_t k = 0; k < 3; ++k) {
+            outfile_l[k] << std::setprecision(std::numeric_limits<double>::max_digits10);
+            outfile_B[k] << std::setprecision(std::numeric_limits<double>::max_digits10);
         }
-
-        area_coeff /= 4 * M_PI;
-
-        total_mass = 0;
-        for (size_t n_face = 0; n_face < faces.size(); n_face++)
-        {
-            total_mass += U[n_face][0] * surface_area[n_face];
-        }
+        outfile_source_budget.open("results/source_budget.dat");
+        outfile_numerical_budget.open("results/numerical_budget.dat");
+        outfile_source_budget << std::setprecision(std::numeric_limits<double>::max_digits10)
+            << "# time cumulative_Sigma cumulative_Lx cumulative_Ly cumulative_Lz cumulative_E acc_E_gain settling_E_loss friction_E_loss radiation_E_loss\n";
+        outfile_numerical_budget << std::setprecision(std::numeric_limits<double>::max_digits10)
+            << "# time radial_L_RMS_fraction initial_projection_Lx initial_projection_Ly initial_projection_Lz cumulative_projection_Lx cumulative_projection_Ly cumulative_projection_Lz nonpositive_geff_faces f_r_above_one_faces\n";
+        parameters["compiled_DIM"] = DIM;
+        parameters["dim"] = DIM;
+        parameters["gam3d"] = 1./(2.-gam);
+        parameters["accretion_on"] = accretion_on;
+        parameters["source_numerics_version"] = 2;
+        parameters["area_coeff"] = area_coeff;
+        parameters["initial_total_mass"] = total_mass;
+        parameters["density_floor"] = density_floor;
+        parameters["pressure_floor"] = pressure_floor;
+        parameters["enforce_tangent_angular_momentum"] = enforce_tangent_angular_momentum;
+        parameters["project_restart_angular_momentum"] = project_restart_angular_momentum;
+        parameters["angular_momentum_tolerance"] = angular_momentum_tolerance;
+        parameters["strict_source_domain"] = strict_source_domain;
+        std::ofstream source_config("results/source_config.json");
+        source_config << std::setprecision(std::numeric_limits<double>::max_digits10) << parameters.dump(2) << '\n';
     }
 
     void print_rho()
@@ -444,6 +529,18 @@ public:
     return {en_gain_acc_o, en_loss_fall_o, en_loss_fric_o, en_loss_rad_o,};
     };
 
+    void write_t_source_budget()
+    {
+        outfile_source_budget << this->time();
+        for (double value : cumulative_source) outfile_source_budget << ' ' << value;
+        for (double value : cumulative_energy) outfile_source_budget << ' ' << value;
+        outfile_source_budget << '\n';
+        outfile_numerical_budget << this->time() << ' ' << angular_momentum_radial_fraction();
+        for (double value : initial_projection_L) outfile_numerical_budget << ' ' << value;
+        for (double value : projection_L) outfile_numerical_budget << ' ' << value;
+        outfile_numerical_budget << ' ' << nonpositive_gravity_faces << ' ' << settling_gain_faces << '\n';
+    }
+
     void write_final_state()
     {
         std::ofstream out_final;
@@ -558,14 +655,19 @@ protected:
       // source should still return vector where res[4]=dE/dt
 
 
-        static double en_gain_acc, en_loss_fall, en_loss_fric, en_loss_rad;
-        static double total_mass_gain = 0, total_mass_gain_old = 0;
-        static double total_mass_loss = 0;
+        auto& diagnostics = source_face_diagnostics[n_face];
+        diagnostics = {};
         StateVec res;
         vector3d<double> l_vec, vel, vel_dot, omega_acc, omxr, rxv, fc_normed, l_fr, wr, vel0, omxv, rxomxv, omxomxr, rxomxomxr,B;
 
         for (size_t i = 0; i < DIM; i++)
             res[i] = 0;
+
+        if (!(u[0] > 0.) || !(u[4] > 0.) ||
+            !std::all_of(u.begin(), u.end(), [](double value) { return std::isfinite(value); })) {
+            diagnostics.invalid = true;
+            return res; // the serial stage reduction aborts before any update
+        }
 
 
 
@@ -594,10 +696,7 @@ protected:
             vel += cross_product(omega0, fc_normed);
         }*/
 
-         if(vel.norm()>1){
-            stop_check=true;
-            std::cout<<"superluminal vel in source calculation: "<<vel.norm()<<"\n";           
-        }
+        if (vel.norm() > 1.) diagnostics.invalid = true;
 
         double theta = std::acos(face_centers[n_face][2] / face_centers[n_face].norm());
 
@@ -614,11 +713,16 @@ protected:
 
         double GM = 0.217909;
         double g_eff = GM - vel.norm() * vel.norm();
+        diagnostics.g_eff = g_eff;
         double c_sigma = 4.85e36; // c/sigma_SB in R_unit*t_unit^2*K^4/M_unit
         double k_m = 1.6e-13;     // k/m in V_unit(speed of light)^2/K
         double kappa = 3.4e6; // scattering opacity in 1/Sigma_unit (R_unit^2/M_unit)
         // new expression for C
-        double C = 12. / 5 * k_m * u[0] / (3 * u[4]) * pow(3. / 4 * c_sigma * g_eff * u[0], 1. / 4);
+        // Keep the legacy nonpositive-g beta fallback explicit. Strict mode
+        // rejects that domain after the parallel stage, without changing Qrad.
+        double C = g_eff >= 0. ? 12. / 5 * k_m * u[0] / (3 * u[4]) *
+            pow(3. / 4 * c_sigma * g_eff * u[0], 1. / 4) :
+            std::numeric_limits<double>::quiet_NaN();
         double beta_switch = 0.5479; // switch point for initial function
         double C_switch = beta_switch / (1 - beta_switch);
         double beta, gam_0;
@@ -638,8 +742,8 @@ protected:
             if (beta > beta_ceil || std::isnan(beta) || std::isinf(beta))
                 beta = beta_ceil;
 
-            beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
-            beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5 / 4)));
+            beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5. / 4)));
+            beta = beta - (beta / (pow(1 - beta, 1. / 4)) - C) / ((4 - 3 * beta) / (4 * pow(1 - beta, 5. / 4)));
 
             if (beta < beta_floor) // beta limitations
                 beta = beta_floor;
@@ -734,9 +838,9 @@ protected:
         {
             
             if(smooth_acc_on){
-                if(this->time()<t_acc){
+                if(source_time()<t_acc){
                     res[0] = adj_coeff * 1 / area_coeff * acc_rate / std::sqrt(2 * M_PI * sigma * sigma) *
-                        std::exp(-(theta_acc - mu) * (theta_acc - mu) / (2 * sigma * sigma)) * (0.99/t_acc * t + 0.01);
+                        std::exp(-(theta_acc - mu) * (theta_acc - mu) / (2 * sigma * sigma)) * (0.99/t_acc * source_time() + 0.01);
 
                 }
                 else
@@ -766,10 +870,7 @@ protected:
             res[3] += res[0] * rxv[2];
             res[4] += res[0] * (e_acc + ((omxr - vel).norm() * (omxr - vel).norm()) / 2.);
 
-            total_mass_gain += res[0] * surface_area[n_face];
-
-            en_gain_acc+= dt/2.*res[0] * (e_acc + ((omxr - vel).norm() * (omxr - vel).norm()) / 2.) * surface_area[n_face];
-            en_gain_acc_o=en_gain_acc;
+            diagnostics.energy[0] = res[0]*(e_acc + ((omxr-vel).norm()*(omxr-vel).norm())/2.);
             // sink term for mass into crust (+ energy and angular momentum)
             double fall_eff = 1; // how much of accreted material is gonna fall
 
@@ -786,7 +887,7 @@ protected:
                 res[2] -= dmdt * rxv[1];
                 res[3] -= dmdt * rxv[2];
                 res[4] -= dmdt * (gam_0 / (gam_0 - 1) * u[4] / u[0] + (vel.norm() * vel.norm()) / 2.);
-                total_mass_gain -= dmdt * surface_area[n_face];
+                diagnostics.energy[1] = dmdt*(gam_0/(gam_0-1)*u[4]/u[0] + vel.norm()*vel.norm()/2.);
             }
 
             // energy sink term (radiation energy diffusion)
@@ -799,13 +900,15 @@ protected:
 
             res[4] -= g_eff / kappa * (1 - beta);
 
-            en_loss_rad += dt/2.*g_eff / kappa * (1 - beta)* surface_area[n_face];
-            en_loss_rad_o= en_loss_rad;
+            diagnostics.energy[3] = g_eff/kappa*(1-beta);
         }
 
         // friction and depletion
         if (friction_on)
         {
+            // Settling exists even with accretion disabled. It removes the
+            // locally reconstructed tangential momentum in every configuration.
+            rxv = cross_product(fc_normed, vel);
             // IS99 friction
             double GM = 0.217909; // grav parameter in R_unit^3/t_unit^2
             double g_eff = std::max(GM - vel.norm() * vel.norm(),0.);
@@ -829,8 +932,8 @@ protected:
 
             //std::cout<<(vel - vel0).norm()<<"\n";
 
-            en_loss_fric+=dt/2.*alpha * rho * (vel - vel0).norm()*(dot_product(vel,vel0)-dot_product(vel0,vel0)) * surface_area[n_face];
-            en_loss_fric_o= en_loss_fric;
+            diagnostics.energy[2] = alpha*rho*(vel-vel0).norm()*
+                (dot_product(vel,vel0)-dot_product(vel0,vel0));
             //res[4] -= alpha * u[0] * omega_acc_abs * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
             // res[4] -= alpha * rho * (vel - vel0).norm() * (vel.norm() * vel.norm() / 2. + u[4] * gam_0 / ((gam_0 - 1) * u[0]));
             // total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
@@ -839,7 +942,6 @@ protected:
             //total_mass_loss -= alpha * u[0] * omega_acc_abs * surface_area[n_face];
             //double dmdt= alpha * u[0] * omega_acc_abs; //fall terms
 
-            total_mass_loss -= alpha * rho * (vel - vel0).norm() * surface_area[n_face];
             double dmdt= alpha * rho * (vel - vel0).norm(); //fall terms
 
             //total_mass_loss -=3./4*(1-beta)*g_eff*u[0];
@@ -858,11 +960,11 @@ protected:
             //old fall terms  
             
             double f_r=6e-3/(alpha/1e-4 * u[0])*(1-beta)*pow(vel.norm()/std::sqrt(gam_0*u[4]/u[0]),2);
+            diagnostics.f_r = f_r; // deliberately uncapped: a model choice
 
             res[4]-= dmdt * (gam_0 / (gam_0 - 1) * u[4]*(1-f_r) / u[0] + (vel.norm() * vel.norm()) / 2.);
             
-            en_loss_fall+=dt/2.* (dmdt * gam_0 / (gam_0 - 1) * u[4]*(1-f_r)  / u[0]+g_eff*std::sqrt(gam_0*u[4] / u[0])/(3*kappa*(gam_0-1)))* surface_area[n_face];
-            en_loss_fall_o=en_loss_fall;
+            diagnostics.energy[1] = dmdt*(gam_0/(gam_0-1)*u[4]*(1-f_r)/u[0] + vel.norm()*vel.norm()/2.);
 
 
 
